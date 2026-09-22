@@ -293,75 +293,40 @@ try:
             # =================================================
             # RISK ENGINE
             # =================================================
+    # RISK ENGINE
 
-            risk_score = 0
+    risk_score = 0
+    signals = []
 
-            signals = []
+    if latest_rainfall >= 20:
+        risk_score += 3
+        signals.append("High daily rainfall detected")
+    elif latest_rainfall >= 5:
+        risk_score += 1
+        signals.append("Moderate daily rainfall")
 
-            if latest_rainfall >= 20:
+    if recent_rainfall >= 40:
+        risk_score += 2
+        signals.append("High rainfall over recent days")
+    elif recent_rainfall >= 15:
+        risk_score += 1
+        signals.append("Moderate recent rainfall")
 
-                risk_score += 3
+    if latest_temperature >= 35:
+        risk_score += 2
+        signals.append("Very high temperature")
+    elif latest_temperature >= 32:
+        risk_score += 1
+        signals.append("High temperature")
 
-                signals.append(
-                    "High daily rainfall signal"
-                )
+    # RISK LEVEL
 
-            elif latest_rainfall >= 5:
-
-                risk_score += 1
-
-                signals.append(
-                    "Rainfall signal"
-                )
-
-            if recent_rainfall >= 40:
-
-                risk_score += 2
-
-                signals.append(
-                    "High recent rainfall accumulation"
-                )
-
-            elif recent_rainfall >= 15:
-
-                risk_score += 1
-
-                signals.append(
-                    "Recent rainfall accumulation"
-                )
-
-            if latest_temperature >= 35:
-
-                risk_score += 2
-
-                signals.append(
-                    "High temperature signal"
-                )
-
-            elif latest_temperature >= 32:
-
-                risk_score += 1
-
-                signals.append(
-                    "Elevated temperature"
-                )
-
-            # =================================================
-            # RISK LEVEL
-            # =================================================
-
-            if risk_score >= 5:
-
-                risk_level = "HIGH"
-
-            elif risk_score >= 2:
-
-                risk_level = "WATCH"
-
-            else:
-
-                risk_level = "LOW"
-
+    if risk_score >= 5:
+        risk_level = "HIGH"
+    elif risk_score >= 2:
+        risk_level = "WATCH"
+    else:
+        risk_level = "LOW"
             # =================================================
             # EARTH SIGNAL
             # =================================================
