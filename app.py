@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # ============================================================
 
 st.set_page_config(
-    page_title="TerraSignal V2",
+    page_title="TerraSignal ",
     page_icon="🌍",
     layout="wide"
 )
