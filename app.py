@@ -817,7 +817,7 @@ Web → SMS → Voice → Basic Phone
             "The next scientific step is to validate the risk "
             "engine against historical environmental events "
             "before making operational warning claims."
-
+        )
 
     # ========================================================
     # ERROR HANDLING
