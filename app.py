@@ -134,68 +134,162 @@ if st.button(
         # =================================================
         # NASA DATA
         # =================================================
+# =================================================
+# NASA DATA — TERRASIGNAL V2
+# =================================================
 
-        st.markdown("---")
-        st.markdown("## 🛰️ Earth Data Analysis")
+st.markdown("---")
+st.markdown("## 🛰️ Earth Data Analysis")
 
-        st.info(
-            "TerraSignal is checking NASA environmental data..."
+st.info(
+    "TerraSignal is checking NASA Earth observation data..."
+)
+
+today = datetime.utcnow().date()
+
+start_date = today - timedelta(days=7)
+
+start = start_date.strftime("%Y%m%d")
+end = today.strftime("%Y%m%d")
+
+# NASA POWER environmental variables
+nasa_url = (
+    "https://power.larc.nasa.gov/api/temporal/daily/point"
+    "?parameters="
+    "T2M_MAX,"
+    "PRECTOTCORR,"
+    "RH2M,"
+    "WS2M,"
+    "WD2M,"
+    "PS,"
+    "ALLSKY_SFC_SW_DWN"
+    "&community=AG"
+    f"&longitude={user['longitude']}"
+    f"&latitude={user['latitude']}"
+    f"&start={start}"
+    f"&end={end}"
+    "&format=JSON"
+)
+
+try:
+
+    with urllib.request.urlopen(
+        nasa_url,
+        timeout=20
+    ) as response:
+
+        data = json.loads(
+            response.read().decode()
         )
 
-        today = datetime.utcnow().date()
+    parameters = data["properties"]["parameter"]
 
-        start_date = today - timedelta(days=7)
+    # -------------------------------------------------
+    # NASA POWER DATA
+    # -------------------------------------------------
 
-        start = start_date.strftime("%Y%m%d")
-        end = today.strftime("%Y%m%d")
+    temperature_data = parameters["T2M_MAX"]
+    rainfall_data = parameters["PRECTOTCORR"]
+    humidity_data = parameters["RH2M"]
+    wind_speed_data = parameters["WS2M"]
+    wind_direction_data = parameters["WD2M"]
+    pressure_data = parameters["PS"]
+    solar_data = parameters["ALLSKY_SFC_SW_DWN"]
 
-        nasa_url = (
-            "https://power.larc.nasa.gov/api/temporal/daily/point"
-            "?parameters=T2M_MAX,PRECTOTCORR"
-            "&community=AG"
-            f"&longitude={user['longitude']}"
-            f"&latitude={user['latitude']}"
-            f"&start={start}"
-            f"&end={end}"
-            "&format=JSON"
+    dates = sorted(
+        temperature_data.keys()
+    )
+
+    if not dates:
+        raise ValueError(
+            "No NASA data returned."
         )
 
-        try:
+    latest_date = dates[-1]
 
-            with urllib.request.urlopen(
-                nasa_url,
-                timeout=20
-            ) as response:
+    # -------------------------------------------------
+    # LATEST VALUES
+    # -------------------------------------------------
 
-                data = json.loads(
-                    response.read().decode()
-                )
+    latest_temperature = temperature_data[latest_date]
 
-            parameters = data["properties"]["parameter"]
+    latest_rainfall = rainfall_data[latest_date]
 
-            temperature_data = parameters["T2M_MAX"]
-            rainfall_data = parameters["PRECTOTCORR"]
+    latest_humidity = humidity_data[latest_date]
 
-            dates = sorted(
-                temperature_data.keys()
-            )
+    latest_wind_speed = wind_speed_data[latest_date]
 
-            if not dates:
-                raise ValueError(
-                    "No NASA data returned."
-                )
+    latest_wind_direction = wind_direction_data[latest_date]
 
-            latest_date = dates[-1]
+    latest_pressure = pressure_data[latest_date]
 
-            latest_temperature = temperature_data[latest_date]
+    latest_solar = solar_data[latest_date]
 
-            latest_rainfall = rainfall_data[latest_date]
+    # -------------------------------------------------
+    # RECENT RAINFALL
+    # -------------------------------------------------
 
-            recent_rainfall = sum(
-                max(0, rainfall_data[d])
-                for d in dates
-            )
+    recent_rainfall = sum(
+        max(0, rainfall_data[d])
+        for d in dates
+    )
 
+    # -------------------------------------------------
+    # DISPLAY NASA DATA
+    # -------------------------------------------------
+
+    st.markdown("### 🌍 Current Environmental Conditions")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.metric(
+            "🌧️ Rainfall",
+            f"{latest_rainfall:.1f} mm"
+        )
+
+        st.metric(
+            "🌡️ Temperature",
+            f"{latest_temperature:.1f} °C"
+        )
+
+        st.metric(
+            "💧 Humidity",
+            f"{latest_humidity:.1f} %"
+        )
+
+        st.metric(
+            "💨 Wind Speed",
+            f"{latest_wind_speed:.1f} m/s"
+        )
+
+    with col2:
+
+        st.metric(
+            "🧭 Wind Direction",
+            f"{latest_wind_direction:.0f}°"
+        )
+
+        st.metric(
+            "📉 Surface Pressure",
+            f"{latest_pressure:.1f} kPa"
+        )
+
+        st.metric(
+            "☀️ Solar Radiation",
+            f"{latest_solar:.1f} kWh/m²/day"
+        )
+
+        st.metric(
+            "🌧️ 7-Day Rainfall",
+            f"{recent_rainfall:.1f} mm"
+        )
+
+    st.success(
+        f"NASA POWER data successfully retrieved for "
+        f"{user['location']}."
+    )
             # =================================================
             # RISK ENGINE
             # =================================================
