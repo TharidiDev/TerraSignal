@@ -59,7 +59,7 @@ with st.form("register_user_form"):
             st.success(f"✅ {name} registered successfully!")
         else:
             st.error("Please enter both name and caller ID.")    
-    }
+
 
 
 # ---------------------------------------------------------
