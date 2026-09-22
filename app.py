@@ -3,254 +3,546 @@ import urllib.request
 import json
 from datetime import datetime, timedelta
 
+# ---------------------------------------------------------
+# TERRASIGNAL
+# Basic-phone environmental signal prototype
+# ---------------------------------------------------------
+
 st.set_page_config(
     page_title="TerraSignal",
     page_icon="🌍",
     layout="centered"
 )
 
-# --------------------------------------------------
-# TerraSignal
-# Missed-call based environmental warning prototype
-# --------------------------------------------------
+# -----------------------------
+# Simple visual design
+# -----------------------------
 
-st.title("🌍 TerraSignal")
-st.subheader("Earth intelligence. Human reach.")
+st.markdown("""
+<style>
+    .big-title {
+        font-size: 42px;
+        font-weight: 800;
+        text-align: center;
+    }
+
+    .subtitle {
+        font-size: 20px;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+
+    .signal-box {
+        padding: 20px;
+        border-radius: 15px;
+        background: #f5f5f5;
+        margin-top: 15px;
+    }
+
+    .phone-box {
+        padding: 15px;
+        border-radius: 12px;
+        background: #eeeeee;
+        font-size: 18px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# -----------------------------
+# Header
+# -----------------------------
+
+st.markdown(
+    '<div class="big-title">🌍 TerraSignal</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="subtitle">Earth intelligence. Human reach.</div>',
+    unsafe_allow_html=True
+)
 
 st.markdown("---")
 
+
+# -----------------------------
 # Demo registered users
-users = {
-    "Grandmother": {
+# -----------------------------
+# This is only a prototype database.
+# Later this will be replaced with a real database.
+
+registered_users = {
+    "0771234567": {
+        "name": "Grandmother",
         "city": "Colombo",
-        "latitude": 6.9271,
-        "longitude": 79.8612
+        "lat": 6.9271,
+        "lon": 79.8612
     },
-    "Grandfather": {
+
+    "0777654321": {
+        "name": "Grandfather",
         "city": "Kandy",
-        "latitude": 7.2906,
-        "longitude": 80.6337
+        "lat": 7.2906,
+        "lon": 80.6337
     },
-    "Family Member": {
+
+    "0714567890": {
+        "name": "Family Member",
         "city": "Galle",
-        "latitude": 6.0329,
-        "longitude": 80.2168
+        "lat": 6.0329,
+        "lon": 80.2168
     }
 }
 
-user_name = st.selectbox(
-    "Registered phone:",
-    list(users.keys())
+
+# -----------------------------
+# Basic phone interface
+# -----------------------------
+
+st.markdown("### 📞 Basic Phone Interface")
+
+phone_number = st.text_input(
+    "Enter registered phone number:",
+    value="0771234567"
 )
 
-st.caption("Demo mode — simulating a missed call from a basic phone.")
+st.caption(
+    "Demo mode: the button below simulates one missed call."
+)
 
-if st.button("📞 Simulate Missed Call", use_container_width=True):
+st.markdown("---")
 
-    user = users[user_name]
 
-    st.success("📞 Missed call received")
+# -----------------------------
+# Missed call simulation
+# -----------------------------
 
-    st.markdown("### 👤 User")
-    st.write(user_name)
+if st.button(
+    "📞 Simulate 1 Missed Call",
+    use_container_width=True
+):
 
-    st.markdown("### 📍 Registered location")
-    st.write(user["city"])
+    # ---------------------------------
+    # Check phone number
+    # ---------------------------------
 
-    st.markdown("---")
+    if phone_number not in registered_users:
 
-    st.markdown("### 🛰️ TerraSignal is checking Earth data...")
-
-    # Get last 3 days of NASA POWER data
-    today = datetime.utcnow().date()
-    start_date = today - timedelta(days=3)
-
-    start = start_date.strftime("%Y%m%d")
-    end = today.strftime("%Y%m%d")
-
-    url = (
-        "https://power.larc.nasa.gov/api/temporal/daily/point"
-        "?parameters=T2M_MAX,PRECTOTCORR"
-        f"&community=AG"
-        f"&longitude={user['longitude']}"
-        f"&latitude={user['latitude']}"
-        f"&start={start}"
-        f"&end={end}"
-        "&format=JSON"
-    )
-
-    try:
-        with urllib.request.urlopen(url, timeout=20) as response:
-            data = json.loads(response.read().decode())
-
-        temperature_data = data["properties"]["parameter"]["T2M_MAX"]
-        rainfall_data = data["properties"]["parameter"]["PRECTOTCORR"]
-
-        dates = sorted(temperature_data.keys())
-
-        latest_date = dates[-1]
-
-        latest_temperature = temperature_data[latest_date]
-        latest_rainfall = rainfall_data[latest_date]
-
-        recent_rainfall = sum(
-            rainfall_data[d]
-            for d in dates
-            if rainfall_data[d] >= 0
+        st.error(
+            "❌ This phone number is not registered with TerraSignal."
         )
 
-        # --------------------------------------------------
-        # Prototype risk engine
-        # These thresholds are experimental and must be
-        # scientifically validated before real-world use.
-        # --------------------------------------------------
+    else:
 
-        risk_score = 0
-        signals = []
+        user = registered_users[phone_number]
 
-        if latest_rainfall >= 20:
-            risk_score += 2
-            signals.append("Heavy rainfall signal")
+        # ---------------------------------
+        # Incoming call status
+        # ---------------------------------
 
-        elif latest_rainfall >= 5:
-            risk_score += 1
-            signals.append("Rainfall signal")
+        st.success("📞 MISSED CALL RECEIVED")
 
-        if latest_temperature >= 35:
-            risk_score += 2
-            signals.append("High temperature signal")
+        st.markdown("### 👤 Registered User")
+        st.write(user["name"])
 
-        elif latest_temperature >= 32:
-            risk_score += 1
-            signals.append("Elevated temperature")
-
-        if risk_score >= 3:
-            risk_level = "HIGH"
-        elif risk_score >= 1:
-            risk_level = "WATCH"
-        else:
-            risk_level = "LOW"
-
-        # --------------------------------------------------
-        # TerraSignal result
-        # --------------------------------------------------
+        st.markdown("### 📍 Registered Location")
+        st.write(user["city"])
 
         st.markdown("---")
 
-        st.markdown("## 📡 EARTH SIGNAL")
+        # ---------------------------------
+        # NASA data retrieval
+        # ---------------------------------
 
-        if risk_level == "HIGH":
-            st.error("⚠️ HIGH RISK SIGNAL")
+        st.markdown("### 🛰️ Checking Earth data...")
 
-        elif risk_level == "WATCH":
-            st.warning("🟠 WATCH SIGNAL")
+        today = datetime.utcnow().date()
 
-        else:
-            st.success("🟢 LOW RISK SIGNAL")
+        start_date = today - timedelta(days=7)
 
-        st.write("Detected signals:")
+        start = start_date.strftime("%Y%m%d")
+        end = today.strftime("%Y%m%d")
 
-        if signals:
-            for signal in signals:
-                st.write(f"• {signal}")
-        else:
-            st.write("• No major signal detected")
+        nasa_url = (
+            "https://power.larc.nasa.gov/api/temporal/daily/point"
+            "?parameters=T2M_MAX,PRECTOTCORR"
+            "&community=AG"
+            f"&longitude={user['lon']}"
+            f"&latitude={user['lat']}"
+            f"&start={start}"
+            f"&end={end}"
+            "&format=JSON"
+        )
 
-        st.markdown("---")
+        try:
 
-        # --------------------------------------------------
-        # Personalized SMS
-        # --------------------------------------------------
+            with urllib.request.urlopen(
+                nasa_url,
+                timeout=20
+            ) as response:
 
-        st.markdown("## 📱 SMS READY")
+                data = json.loads(
+                    response.read().decode()
+                )
 
-        if risk_level == "HIGH":
-            sms = (
-                f"ටෙරාසිග්නල්: {user['city']} ප්‍රදේශයේ "
-                "අයහපත් කාලගුණික තත්ත්වයක සංඥාවක් හඳුනාගෙන ඇත. "
-                "ප්‍රවේශම් වන්න."
+            temp_data = (
+                data["properties"]
+                ["parameter"]
+                ["T2M_MAX"]
             )
 
-        elif risk_level == "WATCH":
-            sms = (
-                f"ටෙරාසිග්නල්: {user['city']} ප්‍රදේශයේ "
-                "කාලගුණික වෙනසක් නිරීක්ෂණය වී ඇත. "
-                "යන විට ප්‍රවේශම් වන්න."
+            rain_data = (
+                data["properties"]
+                ["parameter"]
+                ["PRECTOTCORR"]
             )
 
-        else:
-            sms = (
-                f"ටෙරාසිග්නල්: {user['city']} ප්‍රදේශයේ "
-                "දැනට විශේෂ අවදානම් සංඥාවක් හඳුනාගෙන නැත."
+            dates = sorted(temp_data.keys())
+
+            if not dates:
+                raise ValueError(
+                    "NASA returned no data for this period."
+                )
+
+            latest_date = dates[-1]
+
+            latest_temp = temp_data[latest_date]
+            latest_rain = rain_data[latest_date]
+
+            # -----------------------------
+            # Recent rainfall
+            # -----------------------------
+
+            recent_rainfall = sum(
+                max(0, rain_data[d])
+                for d in dates
             )
 
-        st.info(sms)
+            # -----------------------------
+            # Risk engine
+            # -----------------------------
 
-        # --------------------------------------------------
-        # Voice message
-        # --------------------------------------------------
+            risk_score = 0
+            detected_signals = []
 
-        st.markdown("## 🗣️ VOICE MESSAGE")
+            # Rain signal
+            if latest_rain >= 20:
 
-        if risk_level == "HIGH":
-            voice_message = (
-                f"ආයුබෝවන්. {user['city']} ප්‍රදේශය සඳහා "
-                "ප්‍රවේශම් වීමේ කාලගුණික සංඥාවක් ලැබී ඇත. "
-                "කරුණාකර ආරක්ෂිතව සිටින්න."
+                risk_score += 3
+
+                detected_signals.append(
+                    "High daily rainfall signal"
+                )
+
+            elif latest_rain >= 5:
+
+                risk_score += 1
+
+                detected_signals.append(
+                    "Rainfall signal"
+                )
+
+            # Recent rainfall trend
+            if recent_rainfall >= 40:
+
+                risk_score += 2
+
+                detected_signals.append(
+                    "High recent rainfall accumulation"
+                )
+
+            elif recent_rainfall >= 15:
+
+                risk_score += 1
+
+                detected_signals.append(
+                    "Recent rainfall accumulation"
+                )
+
+            # Heat signal
+            if latest_temp >= 35:
+
+                risk_score += 2
+
+                detected_signals.append(
+                    "High temperature signal"
+                )
+
+            elif latest_temp >= 32:
+
+                risk_score += 1
+
+                detected_signals.append(
+                    "Elevated temperature"
+                )
+
+            # -----------------------------
+            # Risk classification
+            # -----------------------------
+
+            if risk_score >= 5:
+
+                risk_level = "HIGH"
+
+            elif risk_score >= 2:
+
+                risk_level = "WATCH"
+
+            else:
+
+                risk_level = "LOW"
+
+            # -----------------------------
+            # Earth Signal
+            # -----------------------------
+
+            st.markdown("---")
+
+            st.markdown("## 📡 EARTH SIGNAL")
+
+            if risk_level == "HIGH":
+
+                st.error(
+                    "🔴 HIGH SIGNAL"
+                )
+
+            elif risk_level == "WATCH":
+
+                st.warning(
+                    "🟠 WATCH SIGNAL"
+                )
+
+            else:
+
+                st.success(
+                    "🟢 LOW SIGNAL"
+                )
+
+            # -----------------------------
+            # Explain signal
+            # -----------------------------
+
+            st.markdown(
+                '<div class="signal-box">',
+                unsafe_allow_html=True
             )
-
-        elif risk_level == "WATCH":
-            voice_message = (
-                f"ආයුබෝවන්. {user['city']} ප්‍රදේශයේ "
-                "කාලගුණික වෙනසක් නිරීක්ෂණය වී ඇත. "
-                "කරුණාකර ප්‍රවේශම් වන්න."
-            )
-
-        else:
-            voice_message = (
-                f"ආයුබෝවන්. {user['city']} සඳහා "
-                "දැනට විශේෂ කාලගුණික අවදානමක් හඳුනාගෙන නැත."
-            )
-
-        st.info(voice_message)
-
-        # --------------------------------------------------
-        # Data evidence
-        # --------------------------------------------------
-
-        with st.expander("🔬 NASA data used"):
 
             st.write(
-                f"Latest NASA POWER temperature: "
-                f"{latest_temperature:.1f} °C"
+                f"📍 Location: {user['city']}"
             )
 
             st.write(
-                f"Latest NASA POWER precipitation: "
-                f"{latest_rainfall:.1f} mm"
+                f"🌡️ Latest temperature: "
+                f"{latest_temp:.1f} °C"
             )
 
             st.write(
-                f"Recent rainfall total: "
+                f"🌧️ Latest precipitation: "
+                f"{latest_rain:.1f} mm"
+            )
+
+            st.write(
+                f"🌧️ Recent rainfall total: "
                 f"{recent_rainfall:.1f} mm"
             )
 
             st.write(
-                f"Data date: {latest_date}"
+                f"📅 Data date: {latest_date}"
             )
 
-    except Exception as error:
+            st.markdown(
+                '</div>',
+                unsafe_allow_html=True
+            )
 
-        st.error("TerraSignal could not retrieve NASA data.")
+            # -----------------------------
+            # Detected signals
+            # -----------------------------
 
-        st.code(str(error))
+            st.markdown("### 🔎 Detected Environmental Signals")
+
+            if detected_signals:
+
+                for signal in detected_signals:
+
+                    st.write(
+                        f"• {signal}"
+                    )
+
+            else:
+
+                st.write(
+                    "• No major environmental signal detected."
+                )
+
+            # -----------------------------
+            # Sinhala SMS
+            # -----------------------------
+
+            st.markdown("---")
+
+            st.markdown("## 📱 SINHALA SMS")
+
+            if risk_level == "HIGH":
+
+                sms_message = (
+                    f"ටෙරාසිග්නල්: "
+                    f"{user['city']} ප්‍රදේශයේ "
+                    "අවධානය යොමු කළ යුතු පාරිසරික "
+                    "සංඥා හඳුනාගෙන ඇත. "
+                    "කරුණාකර ප්‍රවේශම් වන්න."
+                )
+
+            elif risk_level == "WATCH":
+
+                sms_message = (
+                    f"ටෙරාසිග්නල්: "
+                    f"{user['city']} ප්‍රදේශයේ "
+                    "කාලගුණික වෙනසක් පිළිබඳ "
+                    "සංඥාවක් හඳුනාගෙන ඇත. "
+                    "කරුණාකර අවධානයෙන් සිටින්න."
+                )
+
+            else:
+
+                sms_message = (
+                    f"ටෙරාසිග්නල්: "
+                    f"{user['city']} සඳහා "
+                    "දැනට ප්‍රධාන පාරිසරික "
+                    "අවදානම් සංඥාවක් හඳුනාගෙන නැත."
+                )
+
+            st.info(sms_message)
+
+            st.caption("📤 SMS status: READY")
+
+
+            # -----------------------------
+            # Sinhala Voice message
+            # -----------------------------
+
+            st.markdown("## 🗣️ SINHALA VOICE MESSAGE")
+
+            if risk_level == "HIGH":
+
+                voice_message = (
+                    f"ආයුබෝවන්. "
+                    f"{user['city']} ප්‍රදේශය සඳහා "
+                    "අවධානය යොමු කළ යුතු "
+                    "පාරිසරික සංඥාවක් ලැබී ඇත. "
+                    "කරුණාකර ප්‍රවේශම් වන්න."
+                )
+
+            elif risk_level == "WATCH":
+
+                voice_message = (
+                    f"ආයුබෝවන්. "
+                    f"{user['city']} ප්‍රදේශයේ "
+                    "කාලගුණික වෙනසක් "
+                    "පිළිබඳ සංඥාවක් ලැබී ඇත. "
+                    "කරුණාකර අවධානයෙන් සිටින්න."
+                )
+
+            else:
+
+                voice_message = (
+                    f"ආයුබෝවන්. "
+                    f"{user['city']} සඳහා "
+                    "දැනට ප්‍රධාන පාරිසරික "
+                    "අවදානම් සංඥාවක් හඳුනාගෙන නැත."
+                )
+
+            st.info(voice_message)
+
+            st.caption(
+                "🔊 Voice call status: READY"
+            )
+
+            # -----------------------------
+            # NASA evidence
+            # -----------------------------
+
+            with st.expander(
+                "🔬 NASA Data Evidence"
+            ):
+
+                st.write(
+                    "NASA POWER Daily Point API"
+                )
+
+                st.write(
+                    f"Latitude: {user['lat']}"
+                )
+
+                st.write(
+                    f"Longitude: {user['lon']}"
+                )
+
+                st.write(
+                    f"Temperature: {latest_temp:.1f} °C"
+                )
+
+                st.write(
+                    f"Precipitation: {latest_rain:.1f} mm"
+                )
+
+                st.write(
+                    f"Recent rainfall: "
+                    f"{recent_rainfall:.1f} mm"
+                )
+
+        except Exception as error:
+
+            st.error(
+                "❌ Could not retrieve NASA data."
+            )
+
+            st.code(str(error))
+
+
+# -----------------------------
+# Demo numbers
+# -----------------------------
+
+with st.expander("📋 Demo registered numbers"):
+
+    st.write(
+        "0771234567 → Grandmother → Colombo"
+    )
+
+    st.write(
+        "0777654321 → Grandfather → Kandy"
+    )
+
+    st.write(
+        "0714567890 → Family Member → Galle"
+    )
+
+
+# -----------------------------
+# Footer
+# -----------------------------
 
 st.markdown("---")
 
 st.caption(
-    "TerraSignal prototype | NASA POWER environmental data"
+    "TerraSignal Prototype"
+)
+
+st.caption(
+    "NASA POWER environmental data"
 )
 
 st.caption(
     "Built by TharidiDev | NASA Space Apps Colombo 2026"
-)
+)        
+       
+
+        
+        
+        
+
+
+
+
