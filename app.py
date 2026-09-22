@@ -1,208 +1,753 @@
 import streamlit as st
 import requests
-import matplotlib.pyplot as plt
-from datetime import datetime
+import pandas as pd
+from datetime import datetime, timedelta
 
-# ==========================================
+# ============================================================
 # PAGE CONFIGURATION
-# ==========================================
+# ============================================================
+
 st.set_page_config(
     page_title="TerraSignal V2",
     page_icon="🌍",
     layout="wide"
 )
 
-# ==========================================
-# 1. DATA FETCHING LAYER (NASA POWER API)
-# ==========================================
-@st.cache_data(ttl=3600)
-def get_nasa_power_data(lat, lon, date_str):
-    url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=PRECTOTCORR,T2M_MAX,RH2M,WS10M,WD10M,PS,ALLSKY_SFC_SW_DWN&community=RE&longitude={lon}&latitude={lat}&start={date_str}&end={date_str}&format=JSON"
-    
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        params = data['properties']['parameter']
-        
-        return {
-            "status": "success",
-            "source": "NASA POWER",
-            "date": date_str,
-            "rainfall": params['PRECTOTCORR'].get(date_str, 0.0),
-            "temp_max": params['T2M_MAX'].get(date_str, 0.0),
-            "humidity": params['RH2M'].get(date_str, 0.0),
-            "wind_speed": params['WS10M'].get(date_str, 0.0),
-            "pressure": params['PS'].get(date_str, 0.0),
-            "solar_rad": params['ALLSKY_SFC_SW_DWN'].get(date_str, 0.0)
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+# ============================================================
+# CONSTANTS
+# ============================================================
 
-# ==========================================
-# 2. SATELLITE LAYER (GPM/IMERG FALLBACK)
-# ==========================================
-def get_gpm_satellite_rainfall(satellite_active):
-    if satellite_active:
-        return 28.5  # Simulated GPM IMERG Rainfall Signal
-    return None
-
-# ==========================================
-# 3. ANOMALY & MULTI-FACTOR RISK ENGINE
-# ==========================================
-def evaluate_risk(power_data, satellite_rain, baseline_mm):
-    if satellite_rain is not None:
-        effective_rain = (power_data['rainfall'] + satellite_rain) / 2
-        data_mode = "NASA POWER + GPM/IMERG (Corroborated)"
-    else:
-        effective_rain = power_data['rainfall']
-        data_mode = "NASA POWER Ground Data (Fallback Active)"
-
-    # Anomaly Multiplier
-    anomaly_ratio = round(effective_rain / baseline_mm, 2) if baseline_mm > 0 else 1.0
-
-    risk_score = 0
-    reasons = []
-
-    if anomaly_ratio >= 3.0:
-        risk_score += 3
-        reasons.append(f"Rainfall is {anomaly_ratio}x above the historical baseline.")
-    elif anomaly_ratio >= 1.5:
-        risk_score += 1
-        reasons.append(f"Rainfall is moderately elevated ({anomaly_ratio}x baseline).")
-
-    if power_data['humidity'] >= 80:
-        risk_score += 1
-        reasons.append(f"High atmospheric humidity ({power_data['humidity']}%).")
-
-    if power_data['wind_speed'] >= 5.0:
-        risk_score += 2
-        reasons.append(f"Elevated wind speeds detected ({power_data['wind_speed']} m/s).")
-
-    # Risk Level Determination
-    if risk_score >= 5:
-        level, color = "HIGH RISK", "red"
-    elif risk_score >= 3:
-        level, color = "WATCH", "orange"
-    else:
-        level, color = "LOW RISK", "green"
-
-    return {
-        "level": level,
-        "color": color,
-        "score": risk_score,
-        "effective_rain": round(effective_rain, 2),
-        "anomaly_ratio": anomaly_ratio,
-        "mode": data_mode,
-        "reasons": reasons
-    }
-
-# ==========================================
-# STREAMLIT UI LAYOUT
-# ==========================================
-st.title("🌍 TerraSignal V2")
-st.caption("Explainable NASA Earth-Observation Risk Prototype | *Earth Intelligence. Human Reach.*")
-
-# Sidebar Controls
-st.sidebar.header("⚙️ Simulation Controls")
-selected_location = st.sidebar.selectbox("Location", ["Colombo", "Kandy", "Galle", "Jaffna"])
-lat_lon_map = {
+LOCATIONS = {
     "Colombo": (6.9271, 79.8612),
     "Kandy": (7.2906, 80.6337),
     "Galle": (6.0535, 80.2210),
     "Jaffna": (9.6615, 80.0255)
 }
-lat, lon = lat_lon_map[selected_location]
 
-# Historical Baseline Control
-baseline = st.sidebar.slider("Historical Baseline Rain (mm)", min_value=5.0, max_value=50.0, value=10.0)
+NASA_POWER_URL = "https://power.larc.nasa.gov/api/temporal/daily/point"
 
-# Toggle GPM Satellite API Simulation
-enable_satellite = st.sidebar.checkbox("Enable GPM Satellite Layer", value=True)
+# ============================================================
+# NASA POWER DATA
+# ============================================================
 
-# NASA Data Date Selection
-test_date = st.sidebar.date_input("Observation Date", datetime(2025, 9, 21)).strftime("%Y%m%d")
+@st.cache_data(ttl=3600)
+def get_nasa_power_data(lat, lon, start_date, end_date):
 
-# Fetch Data
-with st.spinner("Fetching NASA Earth Observation Data..."):
-    power_data = get_nasa_power_data(lat, lon, test_date)
+    parameters = (
+        "PRECTOTCORR,"
+        "T2M_MAX,"
+        "RH2M,"
+        "WS10M,"
+        "WD10M,"
+        "PS,"
+        "ALLSKY_SFC_SW_DWN"
+    )
 
-if power_data.get("status") == "success":
-    sat_rain = get_gpm_satellite_rainfall(enable_satellite)
-    risk_res = evaluate_risk(power_data, sat_rain, baseline)
+    params = {
+        "parameters": parameters,
+        "community": "RE",
+        "longitude": lon,
+        "latitude": lat,
+        "start": start_date,
+        "end": end_date,
+        "format": "JSON"
+    }
 
-    # --- TOP METRICS ---
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Selected Location", selected_location)
-    col2.metric("Effective Rainfall", f"{risk_res['effective_rain']} mm")
-    col3.metric("Baseline Anomaly", f"{risk_res['anomaly_ratio']}x Baseline")
-    col4.metric("Risk Status", risk_res['level'])
-
-    st.divider()
-
-    # --- MAIN CONTENT LAYOUT ---
-    left_col, right_col = st.columns([1, 1])
-
-    with left_col:
-        st.subheader("🧠 Multi-factor Risk Engine")
-        
-        # Risk Badge
-        if risk_res['color'] == "red":
-            st.error(f"🚨 **STATUS: {risk_res['level']}** (Score: {risk_res['score']})")
-        elif risk_res['color'] == "orange":
-            st.warning(f"⚠️ **STATUS: {risk_res['level']}** (Score: {risk_res['score']})")
-        else:
-            st.success(f"✅ **STATUS: {risk_res['level']}** (Score: {risk_res['score']})")
-
-        st.markdown(f"**Data Source Mode:** `{risk_res['mode']}`")
-
-        # WHY Section
-        st.subheader("❓ WHY?")
-        if risk_res['reasons']:
-            for reason in risk_res['reasons']:
-                st.write(f"• {reason}")
-        else:
-            st.write("• All environmental indicators remain within normal parameters.")
-
-        st.divider()
-
-        # Warnings Output
-        st.subheader("🇱🇰 Local Warnings")
-        st.info(f"**Sinhala:** {selected_location} ප්‍රදේශයේ පාරිසරික සංඥා ඉහළ මට්ටමක පවතී. { ' '.join(risk_res['reasons'])}")
-
-        st.subheader("📱 Basic Phone SMS Payload (Demo)")
-        st.code(
-            f"TERRASIGNAL ALERT\n"
-            f"Level: {risk_res['level']}\n"
-            f"Location: {selected_location}\n"
-            f"Key Factor: Rain {risk_res['anomaly_ratio']}x Baseline.\n"
-            f"Monitor safety updates.",
-            language="text"
+    try:
+        response = requests.get(
+            NASA_POWER_URL,
+            params=params,
+            timeout=20
         )
 
-    with right_col:
-        st.subheader("📊 NASA Evidence Panel")
-        
-        # Raw Data Display
-        st.json({
-            "POWER Rainfall (mm)": power_data['rainfall'],
-            "GPM Satellite Rainfall (mm)": sat_rain if sat_rain else "Unavailable (Fallback Used)",
-            "Temperature (°C)": power_data['temp_max'],
-            "Humidity (%)": power_data['humidity'],
-            "Wind Speed (m/s)": power_data['wind_speed'],
-            "Surface Pressure (kPa)": power_data['pressure']
-        })
+        response.raise_for_status()
 
-        # Visual Chart (Rain vs Baseline)
-        st.subheader("📈 Rain vs Historical Baseline")
-        fig, ax = plt.subplots(figsize=(6, 3))
-        categories = ['Historical Baseline', 'NASA POWER', 'GPM Satellite', 'Effective Signal']
-        values = [baseline, power_data['rainfall'], sat_rain if sat_rain else 0, risk_res['effective_rain']]
-        
-        ax.bar(categories, values, color=['#7f8c8d', '#3498db', '#9b59b6', '#e74c3c' if risk_res['color']=='red' else '#2ecc71'])
-        ax.set_ylabel("Rainfall (mm)")
-        plt.xticks(rotation=20)
-        st.pyplot(fig)
+        data = response.json()
 
-else:
-    st.error("Error fetching NASA POWER data. Please check your internet connection or try another date.")
+        parameters_data = data["properties"]["parameter"]
+
+        rainfall = parameters_data.get("PRECTOTCORR", {})
+        temperature = parameters_data.get("T2M_MAX", {})
+        humidity = parameters_data.get("RH2M", {})
+        wind_speed = parameters_data.get("WS10M", {})
+        wind_direction = parameters_data.get("WD10M", {})
+        pressure = parameters_data.get("PS", {})
+        solar = parameters_data.get("ALLSKY_SFC_SW_DWN", {})
+
+        rows = []
+
+        for date_key in rainfall.keys():
+
+            rows.append({
+                "date": pd.to_datetime(date_key),
+                "rainfall": rainfall.get(date_key, 0),
+                "temperature": temperature.get(date_key, 0),
+                "humidity": humidity.get(date_key, 0),
+                "wind_speed": wind_speed.get(date_key, 0),
+                "wind_direction": wind_direction.get(date_key, 0),
+                "pressure": pressure.get(date_key, 0),
+                "solar_radiation": solar.get(date_key, 0)
+            })
+
+        df = pd.DataFrame(rows)
+
+        if df.empty:
+            return None, "NASA POWER returned no data."
+
+        return df.sort_values("date").reset_index(drop=True), None
+
+    except requests.exceptions.RequestException as e:
+
+        return None, f"NASA POWER connection error: {e}"
+
+    except Exception as e:
+
+        return None, f"Data processing error: {e}"
+
+
+# ============================================================
+# HISTORICAL BASELINE
+# ============================================================
+
+def calculate_baseline(df):
+
+    if df is None or df.empty:
+        return 0.0
+
+    rainfall_values = pd.to_numeric(
+        df["rainfall"],
+        errors="coerce"
+    ).dropna()
+
+    if rainfall_values.empty:
+        return 0.0
+
+    return float(rainfall_values.mean())
+
+
+# ============================================================
+# RECENT RAINFALL
+# ============================================================
+
+def calculate_recent_rainfall(df, days=3):
+
+    if df is None or df.empty:
+        return 0.0
+
+    recent = df.tail(days)
+
+    return float(recent["rainfall"].sum())
+
+
+# ============================================================
+# ANOMALY DETECTION
+# ============================================================
+
+def calculate_anomaly(current_rainfall, baseline):
+
+    if baseline <= 0:
+        return 1.0
+
+    return current_rainfall / baseline
+
+
+# ============================================================
+# GPM / IMERG DEMO LAYER
+# ============================================================
+
+def get_satellite_signal(enabled):
+
+    if not enabled:
+        return None
+
+    # IMPORTANT:
+    # This is a DEMONSTRATION value.
+    # It is NOT real-time GPM/IMERG data.
+
+    return 28.5
+
+
+# ============================================================
+# MULTI-FACTOR RISK ENGINE
+# ============================================================
+
+def evaluate_risk(
+    current_rainfall,
+    baseline,
+    recent_rainfall,
+    humidity,
+    wind_speed,
+    satellite_rain
+):
+
+    score = 0
+    reasons = []
+
+    # --------------------------------------------------------
+    # Rainfall anomaly
+    # --------------------------------------------------------
+
+    anomaly_ratio = calculate_anomaly(
+        current_rainfall,
+        baseline
+    )
+
+    if anomaly_ratio >= 3:
+
+        score += 3
+
+        reasons.append(
+            f"Rainfall is approximately "
+            f"{anomaly_ratio:.1f}× the historical baseline."
+        )
+
+    elif anomaly_ratio >= 1.5:
+
+        score += 1
+
+        reasons.append(
+            f"Rainfall is elevated at "
+            f"{anomaly_ratio:.1f}× the historical baseline."
+        )
+
+    # --------------------------------------------------------
+    # Recent rainfall
+    # --------------------------------------------------------
+
+    if recent_rainfall >= 60:
+
+        score += 2
+
+        reasons.append(
+            f"Recent rainfall accumulation is elevated "
+            f"({recent_rainfall:.1f} mm over the analysis window)."
+        )
+
+    elif recent_rainfall >= 30:
+
+        score += 1
+
+        reasons.append(
+            f"Recent rainfall accumulation is moderate "
+            f"({recent_rainfall:.1f} mm)."
+        )
+
+    # --------------------------------------------------------
+    # Humidity
+    # --------------------------------------------------------
+
+    if humidity >= 85:
+
+        score += 1
+
+        reasons.append(
+            f"High atmospheric humidity detected "
+            f"({humidity:.1f}%)."
+        )
+
+    # --------------------------------------------------------
+    # Wind
+    # --------------------------------------------------------
+
+    if wind_speed >= 5:
+
+        score += 2
+
+        reasons.append(
+            f"Elevated wind speed detected "
+            f"({wind_speed:.1f} m/s)."
+        )
+
+    # --------------------------------------------------------
+    # Satellite corroboration
+    # --------------------------------------------------------
+
+    if satellite_rain is not None:
+
+        difference = abs(
+            satellite_rain - current_rainfall
+        )
+
+        if difference <= max(5, current_rainfall * 0.30):
+
+            score += 1
+
+            reasons.append(
+                "Satellite rainfall signal broadly "
+                "corroborates the location-based observation."
+            )
+
+    # --------------------------------------------------------
+    # Risk level
+    # --------------------------------------------------------
+
+    if score >= 7:
+
+        level = "VERY HIGH"
+
+    elif score >= 5:
+
+        level = "HIGH"
+
+    elif score >= 3:
+
+        level = "WATCH"
+
+    else:
+
+        level = "LOW"
+
+    return {
+        "score": score,
+        "level": level,
+        "anomaly_ratio": anomaly_ratio,
+        "reasons": reasons
+    }
+
+
+# ============================================================
+# HEADER
+# ============================================================
+
+st.title("🌍 TerraSignal V2")
+
+st.caption(
+    "NASA Earth observations → anomaly detection → "
+    "explainable environmental risk assessment"
+)
+
+st.info(
+    "Prototype only: risk thresholds and weights are experimental "
+    "and require historical validation before real-world warning use."
+)
+
+# ============================================================
+# SIDEBAR
+# ============================================================
+
+st.sidebar.header("⚙️ TerraSignal Controls")
+
+selected_location = st.sidebar.selectbox(
+    "Location",
+    list(LOCATIONS.keys())
+)
+
+lat, lon = LOCATIONS[selected_location]
+
+st.sidebar.write(
+    f"**Coordinates:** {lat:.4f}, {lon:.4f}"
+)
+
+observation_date = st.sidebar.date_input(
+    "Observation Date",
+    datetime(2025, 9, 21)
+)
+
+analysis_days = st.sidebar.slider(
+    "Historical baseline period (days)",
+    min_value=7,
+    max_value=60,
+    value=30
+)
+
+enable_satellite = st.sidebar.checkbox(
+    "Enable satellite rainfall demo layer",
+    value=True
+)
+
+# ============================================================
+# DATE RANGE
+# ============================================================
+
+end_date = observation_date
+
+baseline_start = observation_date - timedelta(
+    days=analysis_days
+)
+
+# We request the baseline period + observation day.
+
+start_str = baseline_start.strftime("%Y%m%d")
+end_str = end_date.strftime("%Y%m%d")
+
+# ============================================================
+# DATA FETCH
+# ============================================================
+
+with st.spinner("Fetching NASA POWER observations..."):
+
+    df, error = get_nasa_power_data(
+        lat,
+        lon,
+        start_str,
+        end_str
+    )
+
+# ============================================================
+# ERROR HANDLING
+# ============================================================
+
+if error:
+
+    st.error("Unable to retrieve NASA POWER data.")
+
+    st.code(error)
+
+    st.warning(
+        "Try another observation date or check the network connection."
+    )
+
+    st.stop()
+
+# ============================================================
+# FIND OBSERVATION DAY
+# ============================================================
+
+target_row = df[
+    df["date"] == pd.to_datetime(observation_date)
+]
+
+if target_row.empty:
+
+    st.warning(
+        "NASA POWER does not currently contain an observation "
+        "for the selected date."
+    )
+
+    st.write(
+        "Available dates:"
+    )
+
+    st.write(
+        f"{df['date'].min().date()} → "
+        f"{df['date'].max().date()}"
+    )
+
+    st.stop()
+
+current = target_row.iloc[0]
+
+# ============================================================
+# HISTORICAL BASELINE
+# ============================================================
+
+# Exclude today's observation when calculating the baseline.
+
+historical_df = df[
+    df["date"] < pd.to_datetime(observation_date)
+]
+
+baseline = calculate_baseline(historical_df)
+
+recent_rainfall = calculate_recent_rainfall(
+    historical_df,
+    days=min(3, len(historical_df))
+)
+
+# ============================================================
+# CURRENT DATA
+# ============================================================
+
+current_rainfall = float(current["rainfall"])
+current_temperature = float(current["temperature"])
+current_humidity = float(current["humidity"])
+current_wind = float(current["wind_speed"])
+current_wind_direction = float(current["wind_direction"])
+current_pressure = float(current["pressure"])
+current_solar = float(current["solar_radiation"])
+
+# ============================================================
+# SATELLITE SIGNAL
+# ============================================================
+
+satellite_rain = get_satellite_signal(
+    enable_satellite
+)
+
+# ============================================================
+# RISK ENGINE
+# ============================================================
+
+risk = evaluate_risk(
+    current_rainfall=current_rainfall,
+    baseline=baseline,
+    recent_rainfall=recent_rainfall,
+    humidity=current_humidity,
+    wind_speed=current_wind,
+    satellite_rain=satellite_rain
+)
+
+# ============================================================
+# TOP METRICS
+# ============================================================
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric(
+    "📍 Location",
+    selected_location
+)
+
+col2.metric(
+    "🌧️ Rainfall",
+    f"{current_rainfall:.2f} mm"
+)
+
+col3.metric(
+    "📚 Historical Baseline",
+    f"{baseline:.2f} mm"
+)
+
+col4.metric(
+    "📊 Anomaly",
+    f"{risk['anomaly_ratio']:.2f}×"
+)
+
+st.divider()
+
+# ============================================================
+# RISK + WHY
+# ============================================================
+
+left, right = st.columns([1, 1])
+
+with left:
+
+    st.subheader("🧠 Explainable Risk Engine")
+
+    if risk["level"] == "VERY HIGH":
+
+        st.error(
+            f"🚨 VERY HIGH RISK — Score {risk['score']}"
+        )
+
+    elif risk["level"] == "HIGH":
+
+        st.error(
+            f"🔴 HIGH RISK — Score {risk['score']}"
+        )
+
+    elif risk["level"] == "WATCH":
+
+        st.warning(
+            f"🟠 WATCH — Score {risk['score']}"
+        )
+
+    else:
+
+        st.success(
+            f"🟢 LOW RISK — Score {risk['score']}"
+        )
+
+    st.subheader("❓ WHY?")
+
+    if risk["reasons"]:
+
+        for reason in risk["reasons"]:
+
+            st.write(
+                f"• {reason}"
+            )
+
+    else:
+
+        st.write(
+            "• No elevated indicators were detected "
+            "by the prototype rules."
+        )
+
+    st.caption(
+        "Risk score is an experimental prototype metric, "
+        "not an official warning."
+    )
+
+# ============================================================
+# LOCAL WARNING
+# ============================================================
+
+with right:
+
+    st.subheader("🇱🇰 Local Warning")
+
+    sinhala_message = (
+        f"{selected_location} ප්‍රදේශයේ පාරිසරික "
+        f"සංඥා පිළිබඳ අවධානය යොමු කරන්න. "
+        f"වර්ෂාපතනය ඓතිහාසික සාමාන්‍යයට "
+        f"{risk['anomaly_ratio']:.1f} ගුණයක් පමණ වේ."
+    )
+
+    english_message = (
+        f"Environmental conditions in {selected_location} "
+        f"should be monitored. Rainfall is approximately "
+        f"{risk['anomaly_ratio']:.1f}× the historical baseline."
+    )
+
+    st.info(
+        f"**Sinhala**\n\n{sinhala_message}"
+    )
+
+    st.info(
+        f"**English**\n\n{english_message}"
+    )
+
+# ============================================================
+# NASA EVIDENCE PANEL
+# ============================================================
+
+st.divider()
+
+st.subheader("🛰️ NASA Evidence Panel")
+
+evidence_col1, evidence_col2 = st.columns(2)
+
+with evidence_col1:
+
+    st.markdown("### NASA POWER Observation")
+
+    st.json({
+        "Observation Date": observation_date.strftime("%Y-%m-%d"),
+        "Latitude": lat,
+        "Longitude": lon,
+        "Rainfall (mm)": round(current_rainfall, 2),
+        "Maximum Temperature (°C)": round(current_temperature, 2),
+        "Relative Humidity (%)": round(current_humidity, 2),
+        "Wind Speed (m/s)": round(current_wind, 2),
+        "Wind Direction (°)": round(current_wind_direction, 2),
+        "Surface Pressure (kPa)": round(current_pressure, 2),
+        "Solar Radiation": round(current_solar, 2)
+    })
+
+with evidence_col2:
+
+    st.markdown("### 🌧️ Satellite Layer")
+
+    if satellite_rain is not None:
+
+        st.success(
+            "Satellite rainfall demonstration signal available."
+        )
+
+        st.metric(
+            "Satellite Rainfall",
+            f"{satellite_rain:.2f} mm"
+        )
+
+        st.caption(
+            "⚠️ Current V2 demo uses a simulated satellite "
+            "signal. This is not live GPM/IMERG data."
+        )
+
+    else:
+
+        st.warning(
+            "Satellite layer unavailable. "
+            "NASA POWER continues as the primary data source."
+        )
+
+# ============================================================
+# RAINFALL GRAPH
+# ============================================================
+
+st.divider()
+
+st.subheader("📈 Rainfall vs Historical Baseline")
+
+chart_df = df[
+    ["date", "rainfall"]
+].copy()
+
+chart_df = chart_df.rename(
+    columns={
+        "rainfall": "Rainfall (mm)"
+    }
+)
+
+st.line_chart(
+    chart_df.set_index("date")
+)
+
+st.caption(
+    "NASA POWER rainfall observations for the selected "
+    "historical analysis window."
+)
+
+# ============================================================
+# BASELINE COMPARISON
+# ============================================================
+
+st.subheader("📊 Current Observation vs Baseline")
+
+comparison = pd.DataFrame(
+    {
+        "Rainfall (mm)": [
+            baseline,
+            current_rainfall
+        ]
+    },
+    index=[
+        "Historical Baseline",
+        "Observation"
+    ]
+)
+
+st.bar_chart(comparison)
+
+# ============================================================
+# SMS DEMO
+# ============================================================
+
+st.divider()
+
+st.subheader("📱 Basic Phone / SMS Demo")
+
+sms_message = (
+    "TERRASIGNAL\n"
+    f"{risk['level']} - {selected_location}\n"
+    f"Rainfall: {current_rainfall:.1f} mm\n"
+    f"Baseline anomaly: {risk['anomaly_ratio']:.1f}x\n"
+    "Monitor official safety instructions."
+)
+
+st.code(
+    sms_message,
+    language="text"
+)
+
+st.caption(
+    "Communication pathway demonstration only. "
+    "This prototype does not send real SMS messages."
+)
+
+# ============================================================
+# TECHNICAL TRANSPARENCY
+# ============================================================
+
+with st.expander("🔬 Technical Method"):
+
+    st.markdown(
+        """
+        **TerraSignal V2 prototype pipeline**
+
+        1. NASA POWER environmental observations
+        2. Historical rainfall baseline calculation
+        3. Rainfall anomaly calculation
+        4. Recent rainfall accumulation
+        5. Multi-factor experimental risk scoring
+        6. Explainable WHY output
+        7. Sinhala + English warning generation
+        8. Basic-phone SMS payload demonstration
+
+        **Important:** The risk weights and thresholds are experimental.
+        Historical validation is required before any operational use.
+        """
+    )
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.divider()
+
+st.caption(
+    "TerraSignal V2 — Earth Intelligence. Human Reach."
+)
