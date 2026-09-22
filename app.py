@@ -19,7 +19,6 @@ st.set_page_config(
 # These are NOT real phone numbers.
 # ---------------------------------------------------------
 
-REGISTERED_USERS = {
 st.header("Register a User")
 ...
 if "users" not in st.session_state:
