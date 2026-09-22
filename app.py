@@ -117,7 +117,7 @@ st.caption(
     # Step 2 — NASA data request
     # -----------------------------------------------------
 
-    st.markdown("## 🛰️ Earth Data Analysis")
+st.markdown("## 🛰️ Earth Data Analysis")
 
     st.info(
         "TerraSignal is checking NASA environmental data..."
