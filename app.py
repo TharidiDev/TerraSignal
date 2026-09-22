@@ -255,7 +255,6 @@ if st.button(
                 )
 
             # Recent rainfall
-
             if recent_rainfall >= 40:
 
                 risk_score += 2
@@ -269,5 +268,5 @@ if st.button(
                 risk_score += 1
 
                 signals.append(
-                    "Recent rainfall
-```
+                    "Recent rainfall accumulation"
+                )
