@@ -113,24 +113,6 @@ st.caption(
     "Demo mode: this simulates one missed call from a basic phone."
 )
 
-if st.button(
-    "📞 Simulate Missed Call",
-    use_container_width=True
-):
-
-    user = REGISTERED_USERS[caller_id]
-
-    # -----------------------------------------------------
-    # Step 1 — Missed call received
-    # -----------------------------------------------------
-
-    st.success("📞 MISSED CALL RECEIVED")
-
-    st.write(f"👤 User: **{user['name']}**")
-    st.write(f"📍 Registered location: **{user['location']}**")
-
-    st.markdown("---")
-
     # -----------------------------------------------------
     # Step 2 — NASA data request
     # -----------------------------------------------------
