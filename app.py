@@ -61,7 +61,7 @@ with st.form("register_user_form"):
         else:
             st.error("Please enter both name and caller ID.")    
     }
-}
+
 
 # ---------------------------------------------------------
 # Header
