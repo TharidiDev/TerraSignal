@@ -20,23 +20,46 @@ st.set_page_config(
 # ---------------------------------------------------------
 
 REGISTERED_USERS = {
-    "DEMO-GRANDMOTHER": {
-        "name": "Grandmother",
-        "location": "Colombo",
-        "latitude": 6.9271,
-        "longitude": 79.8612
-    },
-    "DEMO-GRANDFATHER": {
-        "name": "Grandfather",
-        "location": "Kandy",
-        "latitude": 7.2906,
-        "longitude": 80.6337
-    },
-    "DEMO-FAMILY-01": {
-        "name": "Family Member",
-        "location": "Galle",
-        "latitude": 6.0329,
-        "longitude": 80.2168
+st.header("Register a User")
+...
+if "users" not in st.session_state:
+    st.session_state.users = {}
+
+st.markdown("## 👤 Register a User")
+
+with st.form("register_user_form"):
+    name = st.text_input("User Name", placeholder="Grandmother")
+    
+    caller_id = st.text_input(
+        "Phone / Caller ID",
+        placeholder="DEMO001"
+    )
+
+    location = st.selectbox(
+        "Location",
+        ["Colombo", "Kandy", "Galle"]
+    )
+
+    register = st.form_submit_button("➕ Register User")
+
+    if register:
+        if name and caller_id:
+            locations = {
+                "Colombo": {"latitude": 6.9271, "longitude": 79.8612},
+                "Kandy": {"latitude": 7.2906, "longitude": 80.6337},
+                "Galle": {"latitude": 6.0329, "longitude": 80.2168}
+            }
+
+            st.session_state.users[caller_id] = {
+                "name": name,
+                "location": location,
+                "latitude": locations[location]["latitude"],
+                "longitude": locations[location]["longitude"]
+            }
+
+            st.success(f"✅ {name} registered successfully!")
+        else:
+            st.error("Please enter both name and caller ID.")    
     }
 }
 
@@ -63,11 +86,29 @@ st.markdown("---")
 # ---------------------------------------------------------
 
 st.markdown("## 📞 Incoming Call")
+st.markdown("## 📞 Simulate Missed Call")
 
-caller_id = st.selectbox(
-    "Select a registered demo caller:",
-    list(REGISTERED_USERS.keys())
+caller_id = st.text_input(
+    "Incoming Caller ID",
+    placeholder="DEMO001"
 )
+
+if st.button("📞 Simulate Missed Call", use_container_width=True):
+
+    if caller_id in st.session_state.users:
+
+        user = st.session_state.users[caller_id]
+
+        st.success("📞 Missed call received!")
+
+        st.write(f"👤 **User:** {user['name']}")
+        st.write(f"📍 **Location:** {user['location']}")
+
+    else:
+
+        st.error(
+            "❌ Caller not registered. Please register the user first."
+        )
 
 st.caption(
     "Demo mode: this simulates one missed call from a basic phone."
