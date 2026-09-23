@@ -10,21 +10,42 @@ from twilio.rest import Client
 # =========================================================
 
 st.set_page_config(
-    page_title="TerraSignal",
+    page_title="TerraSignal Sri Lanka",
     page_icon="🌍",
     layout="centered"
 )
 
 
 # =========================================================
-# LOCATIONS
+# SRI LANKA DISTRICTS
 # =========================================================
 
-LOCATIONS = {
+DISTRICTS = {
+    "Ampara": (7.2914, 81.6720),
+    "Anuradhapura": (8.3114, 80.4037),
+    "Badulla": (6.9934, 81.0550),
+    "Batticaloa": (7.7170, 81.7000),
     "Colombo": (6.9271, 79.8612),
-    "Kandy": (7.2906, 80.6337),
     "Galle": (6.0535, 80.2210),
+    "Gampaha": (7.0873, 80.0144),
+    "Hambantota": (6.1429, 81.1212),
     "Jaffna": (9.6615, 80.0255),
+    "Kalutara": (6.5854, 79.9607),
+    "Kandy": (7.2906, 80.6337),
+    "Kegalle": (7.2513, 80.3464),
+    "Kilinochchi": (9.3803, 80.3770),
+    "Kurunegala": (7.4863, 80.3623),
+    "Mannar": (8.9810, 79.9044),
+    "Matale": (7.4675, 80.6234),
+    "Matara": (5.9549, 80.5550),
+    "Monaragala": (6.8728, 81.3507),
+    "Mullaitivu": (9.2671, 80.8142),
+    "Nuwara Eliya": (6.9497, 80.7891),
+    "Polonnaruwa": (7.9403, 81.0188),
+    "Puttalam": (8.0362, 79.8283),
+    "Ratnapura": (6.6828, 80.3992),
+    "Trincomalee": (8.5874, 81.2152),
+    "Vavuniya": (8.7514, 80.4971)
 }
 
 
@@ -38,16 +59,28 @@ NASA_POWER_URL = (
 
 
 @st.cache_data(ttl=3600)
-def get_nasa_data(lat, lon, start_date, end_date):
+def get_nasa_data(
+    latitude,
+    longitude,
+    start_date,
+    end_date
+):
+
+    parameters = (
+        "PRECTOTCORR,"
+        "T2M_MAX,"
+        "RH2M,"
+        "WS10M"
+    )
 
     params = {
-        "parameters": "PRECTOTCORR,T2M_MAX,RH2M,WS10M",
+        "parameters": parameters,
         "community": "RE",
-        "longitude": lon,
-        "latitude": lat,
+        "longitude": longitude,
+        "latitude": latitude,
         "start": start_date,
         "end": end_date,
-        "format": "JSON",
+        "format": "JSON"
     }
 
     try:
@@ -62,12 +95,25 @@ def get_nasa_data(lat, lon, start_date, end_date):
 
         data = response.json()
 
-        p = data["properties"]["parameter"]
+        parameter_data = (
+            data["properties"]["parameter"]
+        )
 
-        rainfall = p.get("PRECTOTCORR", {})
-        temperature = p.get("T2M_MAX", {})
-        humidity = p.get("RH2M", {})
-        wind = p.get("WS10M", {})
+        rainfall = parameter_data.get(
+            "PRECTOTCORR", {}
+        )
+
+        temperature = parameter_data.get(
+            "T2M_MAX", {}
+        )
+
+        humidity = parameter_data.get(
+            "RH2M", {}
+        )
+
+        wind = parameter_data.get(
+            "WS10M", {}
+        )
 
         rows = []
 
@@ -78,23 +124,24 @@ def get_nasa_data(lat, lon, start_date, end_date):
                 "rainfall": rainfall.get(d, 0),
                 "temperature": temperature.get(d, 0),
                 "humidity": humidity.get(d, 0),
-                "wind": wind.get(d, 0),
+                "wind": wind.get(d, 0)
             })
 
         df = pd.DataFrame(rows)
 
         if df.empty:
-            return None, "NASA returned no data."
+            return None, "NASA POWER returned no data."
 
-        return (
+        df = (
             df.sort_values("date")
-            .reset_index(drop=True),
-            None
+            .reset_index(drop=True)
         )
 
-    except Exception as e:
+        return df, None
 
-        return None, str(e)
+    except Exception as error:
+
+        return None, str(error)
 
 
 # =========================================================
@@ -105,62 +152,52 @@ def detect_hazards(df):
 
     latest = df.iloc[-1]
 
-    rain_today = float(latest["rainfall"])
-    temp_today = float(latest["temperature"])
-    humidity_today = float(latest["humidity"])
-    wind_today = float(latest["wind"])
+    rain = float(latest["rainfall"])
+    temperature = float(latest["temperature"])
+    humidity = float(latest["humidity"])
+    wind = float(latest["wind"])
 
     previous = df.iloc[:-1].tail(7)
 
     if len(previous) > 0:
 
-        avg_rain = float(
-            previous["rainfall"].mean()
-        )
-
-        total_recent_rain = float(
+        recent_rain = float(
             previous["rainfall"].sum()
-        )
-
-        avg_temp = float(
-            previous["temperature"].mean()
         )
 
     else:
 
-        avg_rain = 0
-        total_recent_rain = 0
-        avg_temp = temp_today
+        recent_rain = 0
 
     hazards = []
 
     # -----------------------------------------------------
-    # FLOOD
+    # FLOOD / HEAVY RAIN
     # -----------------------------------------------------
 
-    if rain_today >= 50 or total_recent_rain >= 100:
+    if rain >= 50 or recent_rain >= 100:
 
         hazards.append({
-            "name": "FLOOD",
+            "name": "Flood / Heavy Rain",
             "emoji": "🌊",
             "level": "HIGH",
             "reason": (
-                f"වැසි ප්‍රමාණය වැඩි වී ඇත. "
-                f"අද {rain_today:.1f} mm සහ "
-                f"පසුගිය දින කිහිපයේ "
-                f"{total_recent_rain:.1f} mm පමණ වාර්තා වී ඇත."
+                f"වැසි ප්‍රමාණය ඉහළයි. "
+                f"අද {rain:.1f} mm සහ "
+                f"පසුගිය දිනවල එකතුව "
+                f"{recent_rain:.1f} mm පමණයි."
             )
-        })
+        )
 
-    elif rain_today >= 20:
+    elif rain >= 20:
 
         hazards.append({
-            "name": "FLOOD",
-            "emoji": "🌊",
+            "name": "Heavy Rain",
+            "emoji": "🌧️",
             "level": "WATCH",
             "reason": (
                 f"අද වැසි ප්‍රමාණය "
-                f"{rain_today:.1f} mm පමණ වේ."
+                f"{rain:.1f} mm පමණයි."
             )
         })
 
@@ -168,85 +205,86 @@ def detect_hazards(df):
     # EXTREME HEAT
     # -----------------------------------------------------
 
-    if temp_today >= 35:
+    if temperature >= 35:
 
         hazards.append({
-            "name": "EXTREME HEAT",
+            "name": "Extreme Heat",
             "emoji": "☀️",
             "level": "HIGH",
             "reason": (
                 f"උපරිම උෂ්ණත්වය "
-                f"{temp_today:.1f}°C දක්වා "
-                f"ඉහළ ගොස් ඇත."
+                f"{temperature:.1f}°C පමණයි."
             )
-        })
+        )
 
-    elif temp_today >= 33:
+    elif temperature >= 33:
 
         hazards.append({
-            "name": "EXTREME HEAT",
+            "name": "High Heat",
             "emoji": "☀️",
             "level": "WATCH",
             "reason": (
                 f"උෂ්ණත්වය "
-                f"{temp_today:.1f}°C පමණ වේ."
+                f"{temperature:.1f}°C පමණ ඉහළයි."
             )
         })
 
     # -----------------------------------------------------
-    # DROUGHT
+    # DROUGHT INDICATOR
     # -----------------------------------------------------
 
+    last_7_days = df.tail(7)
+
+    seven_day_rain = float(
+        last_7_days["rainfall"].sum()
+    )
+
     if (
-        len(df) >= 7
-        and df["rainfall"].tail(7).sum() < 5
-        and avg_temp >= 30
+        len(last_7_days) >= 7
+        and seven_day_rain < 5
+        and temperature >= 30
     ):
 
         hazards.append({
-            "name": "DROUGHT",
+            "name": "Drought Indicator",
             "emoji": "🌵",
             "level": "WATCH",
             "reason": (
-                "පසුගිය දින කිහිපයේ වැසි "
-                "ඉතා අඩු මට්ටමක පවතින අතර "
-                "උෂ්ණත්වය ඉහළ මට්ටමක පවතී."
+                "පසුගිය දින 7 තුළ වැසි ඉතා අඩු "
+                "මට්ටමක පවතින අතර උෂ්ණත්වය ඉහළයි."
             )
         })
 
     # -----------------------------------------------------
-    # LANDSLIDE PROTOTYPE
+    # LANDSLIDE INDICATOR
     # -----------------------------------------------------
 
-    if (
-        total_recent_rain >= 80
-        and humidity_today >= 80
-    ):
+    if recent_rain >= 80 and humidity >= 80:
 
         hazards.append({
-            "name": "LANDSLIDE",
+            "name": "Landslide Indicator",
             "emoji": "🪨",
             "level": "WATCH",
             "reason": (
                 "අඛණ්ඩ වැසි සහ ඉහළ ආර්ද්‍රතාවය "
-                "නිසා නායයෑමේ අවදානමක් "
-                "පිළිබඳ අවධානය යොමු කළ යුතුය."
+                "නිසා නායයෑම් සඳහා අවදානම් "
+                "පාරිසරික තත්ත්වයක් පෙන්වයි."
             )
         })
 
     # -----------------------------------------------------
-    # SEVERE STORM PROTOTYPE
+    # STORM INDICATOR
     # -----------------------------------------------------
 
-    if wind_today >= 10 and rain_today >= 20:
+    if wind >= 10 and rain >= 20:
 
         hazards.append({
-            "name": "SEVERE STORM",
+            "name": "Severe Storm Indicator",
             "emoji": "🌀",
             "level": "WATCH",
             "reason": (
                 f"වැසි සමඟ සුළං වේගය "
-                f"{wind_today:.1f} m/s පමණ වේ."
+                f"{wind:.1f} m/s පමණයි."
             )
         })
 
@@ -254,11 +292,11 @@ def detect_hazards(df):
 
 
 # =========================================================
-# MESSAGE GENERATOR
+# SINHALA MESSAGE
 # =========================================================
 
 def create_sinhala_message(
-    location,
+    district,
     hazards
 ):
 
@@ -266,75 +304,84 @@ def create_sinhala_message(
 
         return (
             "TerraSignal\n"
-            f"{location} ප්‍රදේශයේ "
-            "දැනට විශේෂ පාරිසරික අවදානමක් "
+            f"{district} ප්‍රදේශයේ දැනට "
+            "විශේෂ අවදානම් signal එකක් "
             "හඳුනාගෙන නොමැත."
         )
 
+    names = []
+
+    for hazard in hazards:
+        names.append(hazard["name"])
+
+    hazard_text = ", ".join(names)
+
     first = hazards[0]
 
-    if first["name"] == "FLOOD":
+    if "Flood" in first["name"] or "Rain" in first["name"]:
 
-        return (
-            "TerraSignal\n"
-            f"{location} ප්‍රදේශයේ වැසි/ගංවතුර "
-            "අවදානමක් හඳුනාගෙන ඇත.\n"
-            "කරුණාකර ආරක්ෂිත ස්ථානයක සිටින්න."
+        action = (
+            "වැසි/ගංවතුර තත්ත්වය පිළිබඳ "
+            "අවධානයෙන් සිටින්න."
         )
 
-    if first["name"] == "EXTREME HEAT":
+    elif "Heat" in first["name"]:
 
-        return (
-            "TerraSignal\n"
-            f"{location} ප්‍රදේශයේ "
-            "අධික උෂ්ණත්ව අවදානමක් ඇත.\n"
-            "හැකිතාක් සිසිල් ස්ථානයක සිටින්න."
+        action = (
+            "හැකිතාක් සිසිල් ස්ථානයක සිටින්න "
+            "සහ ජලය පානය කරන්න."
         )
 
-    if first["name"] == "DROUGHT":
+    elif "Drought" in first["name"]:
 
-        return (
-            "TerraSignal\n"
-            f"{location} ප්‍රදේශයේ "
-            "වියළි තත්ත්වයක් පවතී.\n"
+        action = (
             "ජලය අරපිරිමැස්මෙන් භාවිතා කරන්න."
         )
 
-    if first["name"] == "LANDSLIDE":
+    elif "Landslide" in first["name"]:
 
-        return (
-            "TerraSignal\n"
-            f"{location} ප්‍රදේශයේ "
-            "නායයෑමේ අවදානමක් පිළිබඳ "
-            "අවධානයෙන් සිටින්න.\n"
-            "කඳු බෑවුම් ආසන්නයෙන් ඉවත් වන්න."
+        action = (
+            "කඳු බෑවුම් ආසන්නයෙන් "
+            "ඉවත් වී ආරක්ෂිත ස්ථානයක සිටින්න."
         )
 
-    if first["name"] == "SEVERE STORM":
+    elif "Storm" in first["name"]:
 
-        return (
-            "TerraSignal\n"
-            f"{location} ප්‍රදේශයේ "
-            "ප්‍රබල වැසි/සුළං තත්ත්වයක් ඇත.\n"
+        action = (
             "ආරක්ෂිත ස්ථානයක සිටින්න."
+        )
+
+    else:
+
+        action = (
+            "කරුණාකර ආරක්ෂිත ස්ථානයක සිටින්න."
         )
 
     return (
         "TerraSignal\n"
-        f"{location} ප්‍රදේශයේ "
-        "අවදානම් තත්ත්වයක් හඳුනාගෙන ඇත."
+        f"{district} ප්‍රදේශයේ {hazard_text} "
+        "පිළිබඳ අවදානම් signal එකක් ඇත.\n"
+        f"{action}"
     )
 
 
 # =========================================================
-# TWILIO SMS
+# TWILIO
 # =========================================================
 
 def send_sms(phone_number, message):
 
-    account_sid = st.secrets["TWILIO_ACCOUNT_SID"]
-    auth_token = st.secrets["TWILIO_AUTH_TOKEN"]
-    from_number = st.secrets["TWILIO_FROM_NUMBER"]
+    account_sid = st.secrets[
+        "TWILIO_ACCOUNT_SID"
+    ]
+
+    auth_token = st.secrets[
+        "TWILIO_AUTH_TOKEN"
+    ]
+
+    from_number = st.secrets[
+        "TWILIO_FROM_NUMBER"
+    ]
 
     client = Client(
         account_sid,
@@ -354,69 +401,105 @@ def send_sms(phone_number, message):
 # HEADER
 # =========================================================
 
-st.title("🌍 TerraSignal")
+st.title("🌍 TerraSignal Sri Lanka")
 
 st.subheader(
-    "NASA Earth Data → Multi-Hazard Warning → Nokia"
+    "Multi-Hazard Early Warning for Basic Phones"
 )
 
 st.write(
-    "Smartphone app එකක් භාවිතා නොකරන "
-    "වැඩිහිටියන් වෙත පාරිසරික අවදානම් "
-    "සරල පණිවිඩයක් ලෙස ලබාදීම සඳහා "
-    "නිර්මාණය කළ prototype එකකි."
+    "NASA Earth observations භාවිතා කරමින් "
+    "පාරිසරික අවදානම් හඳුනාගෙන, "
+    "smartphone එකක් අවශ්‍ය නොවන ලෙස "
+    "සරල warning එකක් phone එකකට ලබාදීම."
 )
 
 st.divider()
 
 
 # =========================================================
-# PERSON
+# RECIPIENT
 # =========================================================
 
-st.subheader("👵 Alert Recipient")
+st.header("👤 Alert Recipient")
 
-person = st.selectbox(
-    "Person",
+recipient_name = st.text_input(
+    "Name",
+    placeholder="ඔබේ නම"
+)
+
+phone_number = st.text_input(
+    "Nokia / Basic Phone Number",
+    placeholder="+947XXXXXXXX"
+)
+
+
+# =========================================================
+# DISTRICT
+# =========================================================
+
+st.header("📍 Your District")
+
+district = st.selectbox(
+    "District",
+    list(DISTRICTS.keys())
+)
+
+latitude, longitude = DISTRICTS[district]
+
+
+# =========================================================
+# LANGUAGE
+# =========================================================
+
+language = st.selectbox(
+    "Alert Language",
     [
-        "Grandmother",
-        "Grandfather",
-        "Family Member"
+        "Sinhala",
+        "English"
     ]
 )
 
 
 # =========================================================
-# LOCATION
+# HAZARD INFORMATION
 # =========================================================
 
-st.subheader("📍 Location")
+st.divider()
 
-location = st.selectbox(
-    "Location",
-    list(LOCATIONS.keys())
+st.header("🚨 Hazards TerraSignal Monitors")
+
+st.write(
+    """
+    🌊 Flood / Heavy Rain  
+    🪨 Landslide indicators  
+    🌀 Severe storm indicators  
+    ☀️ Extreme heat  
+    🌵 Drought indicators  
+    🔥 Wildfire — future dedicated NASA data integration
+    """
 )
 
-lat, lon = LOCATIONS[location]
-
 
 # =========================================================
-# NASA DATA
+# GET NASA DATA
 # =========================================================
 
-observation_date = date.today() - timedelta(days=2)
+observation_date = (
+    date.today() - timedelta(days=2)
+)
 
 start_date = (
     observation_date - timedelta(days=14)
 )
 
 with st.spinner(
-    "🌍 NASA Earth observations ලබාගනිමින්..."
+    "🌍 NASA Earth data ලබාගනිමින්..."
 ):
 
     df, error = get_nasa_data(
-        lat,
-        lon,
+        latitude,
+        longitude,
         start_date.strftime("%Y%m%d"),
         observation_date.strftime("%Y%m%d")
     )
@@ -434,7 +517,7 @@ if error:
 
 
 # =========================================================
-# DETECT HAZARDS
+# DETECT
 # =========================================================
 
 hazards = detect_hazards(df)
@@ -446,93 +529,44 @@ hazards = detect_hazards(df)
 
 st.divider()
 
-if hazards:
+st.header("🌍 Current TerraSignal Status")
 
-    st.subheader(
-        "🚨 TerraSignal Alert"
-    )
+if hazards:
 
     st.error(
-        f"{len(hazards)} hazard signal(s) detected."
+        f"🚨 {len(hazards)} hazard signal(s) detected "
+        f"for {district}."
     )
-
-else:
-
-    st.subheader(
-        "🟢 TerraSignal Status"
-    )
-
-    st.success(
-        "දැනට විශේෂ අවදානම් signal එකක් "
-        "හඳුනාගෙන නොමැත."
-    )
-
-
-# =========================================================
-# HAZARDS
-# =========================================================
-
-if hazards:
 
     for hazard in hazards:
-
-        st.markdown(
-            f"### {hazard['emoji']} "
-            f"{hazard['name']}"
-        )
 
         if hazard["level"] == "HIGH":
 
             st.error(
-                f"🔴 HIGH — {hazard['reason']}"
+                f"{hazard['emoji']} "
+                f"{hazard['name']} — HIGH"
             )
 
         else:
 
             st.warning(
-                f"🟠 WATCH — {hazard['reason']}"
+                f"{hazard['emoji']} "
+                f"{hazard['name']} — WATCH"
             )
 
+else:
 
-# =========================================================
-# SIMPLE NASA DATA
-# =========================================================
-
-latest = df.iloc[-1]
-
-st.divider()
-
-st.subheader(
-    "🌍 What NASA is seeing"
-)
-
-c1, c2, c3 = st.columns(3)
-
-c1.metric(
-    "🌧️ Rain",
-    f"{float(latest['rainfall']):.1f} mm"
-)
-
-c2.metric(
-    "🌡️ Temperature",
-    f"{float(latest['temperature']):.1f} °C"
-)
-
-c3.metric(
-    "💨 Wind",
-    f"{float(latest['wind']):.1f} m/s"
-)
+    st.success(
+        f"🟢 No elevated hazard indicator "
+        f"detected for {district}."
+    )
 
 
 # =========================================================
 # WHY
 # =========================================================
 
-st.divider()
-
-st.subheader(
-    "❓ WHY did TerraSignal alert?"
-)
+st.header("❓ Why?")
 
 if hazards:
 
@@ -540,58 +574,114 @@ if hazards:
 
         st.write(
             f"{hazard['emoji']} "
-            f"**{hazard['name']}** — "
-            f"{hazard['reason']}"
+            f"**{hazard['name']}**"
+        )
+
+        st.write(
+            hazard["reason"]
         )
 
 else:
 
     st.write(
-        "NASA environmental observations වලින් "
-        "prototype thresholds ඉක්මවූ signal එකක් "
+        "Current prototype thresholds වලට අනුව "
+        "elevated environmental signal එකක් "
         "හඳුනාගෙන නොමැත."
     )
 
 
 # =========================================================
-# NOKIA SMS
+# SIMPLE DATA
+# =========================================================
+
+latest = df.iloc[-1]
+
+st.divider()
+
+st.header("🌎 NASA Environmental Signal")
+
+c1, c2, c3 = st.columns(3)
+
+c1.metric(
+    "Rain",
+    f"{float(latest['rainfall']):.1f} mm"
+)
+
+c2.metric(
+    "Temperature",
+    f"{float(latest['temperature']):.1f} °C"
+)
+
+c3.metric(
+    "Wind",
+    f"{float(latest['wind']):.1f} m/s"
+)
+
+
+# =========================================================
+# SMS
 # =========================================================
 
 st.divider()
 
-st.header(
-    "📱 Send Warning to Nokia"
-)
-
-phone_number = st.text_input(
-    "Nokia phone number",
-    placeholder="+947XXXXXXXX"
-)
-
+st.header("📱 Nokia Alert")
 
 sinhala_message = create_sinhala_message(
-    location,
+    district,
     hazards
 )
 
+if language == "Sinhala":
+
+    message_to_send = sinhala_message
+
+else:
+
+    if hazards:
+
+        message_to_send = (
+            "TerraSignal\n"
+            f"Alert for {district}.\n"
+            "Please monitor official safety "
+            "instructions and remain alert."
+        )
+
+    else:
+
+        message_to_send = (
+            "TerraSignal\n"
+            f"No elevated hazard indicator "
+            f"detected for {district}."
+        )
+
 
 st.subheader(
-    "💬 Message that the Nokia will receive"
+    "📩 Message Preview"
 )
 
 st.code(
-    sinhala_message,
+    message_to_send,
     language="text"
 )
 
 
+# =========================================================
+# SEND SMS
+# =========================================================
+
 if st.button(
-    "📲 SEND SMS TO NOKIA",
+    "📲 SEND ALERT TO NOKIA",
     type="primary",
     use_container_width=True
 ):
 
-    if not phone_number:
+    if not recipient_name:
+
+        st.warning(
+            "Recipient name එක ඇතුළත් කරන්න."
+        )
+
+    elif not phone_number:
 
         st.warning(
             "Nokia phone number එක ඇතුළත් කරන්න."
@@ -609,69 +699,74 @@ if st.button(
         try:
 
             with st.spinner(
-                "📡 TerraSignal warning යවමින්..."
+                "📡 Nokia phone එකට warning එක යවමින්..."
             ):
 
                 message_id = send_sms(
                     phone_number,
-                    sinhala_message
+                    message_to_send
                 )
 
             st.success(
-                "✅ Warning එක Nokia phone එකට යැව්වා!"
+                f"✅ Alert sent to {recipient_name}!"
+            )
+
+            st.write(
+                "📱 Nokia phone එකේ SMS එක check කරන්න."
             )
 
             st.caption(
                 f"Message ID: {message_id}"
             )
 
-        except Exception as e:
+        except Exception as error:
 
             st.error(
-                "❌ SMS එක යැවීමට නොහැකි විය."
+                "❌ SMS යැවීමට නොහැකි විය."
             )
 
-            st.code(str(e))
+            st.code(str(error))
 
 
 # =========================================================
-# MISSED CALL DEMO
+# MISSED CALL CONCEPT
 # =========================================================
 
 st.divider()
 
-st.header(
-    "📞 Missed Call Alert"
-)
-
-st.write(
-    "Risk එකක් detect වුණාම recipientට "
-    "missed-call notification එකක් ලබාදෙන "
-    "communication concept එක."
-)
+st.header("📞 Missed-Call Alert Concept")
 
 if hazards:
+
+    st.warning(
+        "🚨 Hazard signal detected"
+    )
+
+    st.write(
+        f"{recipient_name or 'Registered user'} "
+        f"({district}) වෙත missed-call alert එකක් "
+        "trigger කළ හැක."
+    )
 
     if st.button(
         "📞 SIMULATE MISSED CALL"
     ):
 
         st.success(
-            f"📞 Demo missed call created "
-            f"for {person}."
+            "✅ Missed-call event simulated."
         )
 
-        st.info(
-            "මෙය prototype simulation එකකි. "
-            "Real telephony connection එකක් "
-            "වෙනම integrate කළ යුතුය."
+        st.caption(
+            "Prototype simulation only. "
+            "Real telephony integration "
+            "is required for an actual missed call."
         )
 
 else:
 
     st.info(
         "Risk signal එකක් නැති නිසා "
-        "missed call අවශ්‍ය නැත."
+        "missed-call alert එකක් අවශ්‍ය නැත."
     )
 
 
@@ -680,33 +775,31 @@ else:
 # =========================================================
 
 with st.expander(
-    "🔬 NASA data / technical details"
+    "🔬 NASA Data / Technical Details"
 ):
 
     st.write(
-        """
-        Primary data source:
-        NASA POWER daily environmental observations.
+        f"District: {district}"
+    )
 
-        Prototype signals:
-        • Flood / heavy rainfall
-        • Extreme heat
-        • Drought
-        • Rainfall-based landslide indicator
-        • Rain + wind storm indicator
+    st.write(
+        f"Coordinates: "
+        f"{latitude:.4f}, {longitude:.4f}"
+    )
 
-        Important:
-        These thresholds are experimental.
-        They are NOT official disaster warnings.
-        Dedicated NASA hazard products and
-        historical validation should be added
-        before operational use.
-        """
+    st.write(
+        "Primary data source: NASA POWER"
     )
 
     st.dataframe(
         df,
         use_container_width=True
+    )
+
+    st.warning(
+        "Prototype note: hazard thresholds are "
+        "experimental and must be scientifically "
+        "validated before real-world warning use."
     )
 
 
