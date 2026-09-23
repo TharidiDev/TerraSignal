@@ -2,16 +2,19 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
+from twilio.rest import Client
+
 
 # ============================================================
 # PAGE CONFIGURATION
 # ============================================================
 
 st.set_page_config(
-    page_title="TerraSignal ",
+    page_title="TerraSignal",
     page_icon="🌍",
     layout="wide"
 )
+
 
 # ============================================================
 # CONSTANTS
@@ -24,7 +27,10 @@ LOCATIONS = {
     "Jaffna": (9.6615, 80.0255)
 }
 
-NASA_POWER_URL = "https://power.larc.nasa.gov/api/temporal/daily/point"
+NASA_POWER_URL = (
+    "https://power.larc.nasa.gov/api/temporal/daily/point"
+)
+
 
 # ============================================================
 # NASA POWER DATA
@@ -54,6 +60,7 @@ def get_nasa_power_data(lat, lon, start_date, end_date):
     }
 
     try:
+
         response = requests.get(
             NASA_POWER_URL,
             params=params,
@@ -66,43 +73,107 @@ def get_nasa_power_data(lat, lon, start_date, end_date):
 
         parameters_data = data["properties"]["parameter"]
 
-        rainfall = parameters_data.get("PRECTOTCORR", {})
-        temperature = parameters_data.get("T2M_MAX", {})
-        humidity = parameters_data.get("RH2M", {})
-        wind_speed = parameters_data.get("WS10M", {})
-        wind_direction = parameters_data.get("WD10M", {})
-        pressure = parameters_data.get("PS", {})
-        solar = parameters_data.get("ALLSKY_SFC_SW_DWN", {})
+        rainfall = parameters_data.get(
+            "PRECTOTCORR",
+            {}
+        )
+
+        temperature = parameters_data.get(
+            "T2M_MAX",
+            {}
+        )
+
+        humidity = parameters_data.get(
+            "RH2M",
+            {}
+        )
+
+        wind_speed = parameters_data.get(
+            "WS10M",
+            {}
+        )
+
+        wind_direction = parameters_data.get(
+            "WD10M",
+            {}
+        )
+
+        pressure = parameters_data.get(
+            "PS",
+            {}
+        )
+
+        solar = parameters_data.get(
+            "ALLSKY_SFC_SW_DWN",
+            {}
+        )
 
         rows = []
 
         for date_key in rainfall.keys():
 
-            rows.append({
-                "date": pd.to_datetime(date_key),
-                "rainfall": rainfall.get(date_key, 0),
-                "temperature": temperature.get(date_key, 0),
-                "humidity": humidity.get(date_key, 0),
-                "wind_speed": wind_speed.get(date_key, 0),
-                "wind_direction": wind_direction.get(date_key, 0),
-                "pressure": pressure.get(date_key, 0),
-                "solar_radiation": solar.get(date_key, 0)
-            })
+            rows.append(
+                {
+                    "date": pd.to_datetime(date_key),
+                    "rainfall": rainfall.get(
+                        date_key,
+                        0
+                    ),
+                    "temperature": temperature.get(
+                        date_key,
+                        0
+                    ),
+                    "humidity": humidity.get(
+                        date_key,
+                        0
+                    ),
+                    "wind_speed": wind_speed.get(
+                        date_key,
+                        0
+                    ),
+                    "wind_direction": wind_direction.get(
+                        date_key,
+                        0
+                    ),
+                    "pressure": pressure.get(
+                        date_key,
+                        0
+                    ),
+                    "solar_radiation": solar.get(
+                        date_key,
+                        0
+                    )
+                }
+            )
 
         df = pd.DataFrame(rows)
 
         if df.empty:
-            return None, "NASA POWER returned no data."
 
-        return df.sort_values("date").reset_index(drop=True), None
+            return (
+                None,
+                "NASA POWER returned no data."
+            )
+
+        return (
+            df.sort_values("date")
+            .reset_index(drop=True),
+            None
+        )
 
     except requests.exceptions.RequestException as e:
 
-        return None, f"NASA POWER connection error: {e}"
+        return (
+            None,
+            f"NASA POWER connection error: {e}"
+        )
 
     except Exception as e:
 
-        return None, f"Data processing error: {e}"
+        return (
+            None,
+            f"Data processing error: {e}"
+        )
 
 
 # ============================================================
@@ -122,33 +193,46 @@ def calculate_baseline(df):
     if rainfall_values.empty:
         return 0.0
 
-    return float(rainfall_values.mean())
+    return float(
+        rainfall_values.mean()
+    )
 
 
 # ============================================================
 # RECENT RAINFALL
 # ============================================================
 
-def calculate_recent_rainfall(df, days=3):
+def calculate_recent_rainfall(
+    df,
+    days=3
+):
 
     if df is None or df.empty:
         return 0.0
 
     recent = df.tail(days)
 
-    return float(recent["rainfall"].sum())
+    return float(
+        recent["rainfall"].sum()
+    )
 
 
 # ============================================================
 # ANOMALY DETECTION
 # ============================================================
 
-def calculate_anomaly(current_rainfall, baseline):
+def calculate_anomaly(
+    current_rainfall,
+    baseline
+):
 
     if baseline <= 0:
         return 1.0
 
-    return current_rainfall / baseline
+    return (
+        current_rainfall /
+        baseline
+    )
 
 
 # ============================================================
@@ -162,7 +246,7 @@ def get_satellite_signal(enabled):
 
     # IMPORTANT:
     # This is a DEMONSTRATION value.
-    # It is NOT real-time GPM/IMERG data.
+    # It is NOT live GPM/IMERG data.
 
     return 28.5
 
@@ -181,6 +265,7 @@ def evaluate_risk(
 ):
 
     score = 0
+
     reasons = []
 
     # --------------------------------------------------------
@@ -198,7 +283,8 @@ def evaluate_risk(
 
         reasons.append(
             f"Rainfall is approximately "
-            f"{anomaly_ratio:.1f}× the historical baseline."
+            f"{anomaly_ratio:.1f}× "
+            f"the historical baseline."
         )
 
     elif anomaly_ratio >= 1.5:
@@ -207,7 +293,8 @@ def evaluate_risk(
 
         reasons.append(
             f"Rainfall is elevated at "
-            f"{anomaly_ratio:.1f}× the historical baseline."
+            f"{anomaly_ratio:.1f}× "
+            f"the historical baseline."
         )
 
     # --------------------------------------------------------
@@ -219,8 +306,10 @@ def evaluate_risk(
         score += 2
 
         reasons.append(
-            f"Recent rainfall accumulation is elevated "
-            f"({recent_rainfall:.1f} mm over the analysis window)."
+            f"Recent rainfall accumulation "
+            f"is elevated "
+            f"({recent_rainfall:.1f} mm "
+            f"over the analysis window)."
         )
 
     elif recent_rainfall >= 30:
@@ -228,7 +317,8 @@ def evaluate_risk(
         score += 1
 
         reasons.append(
-            f"Recent rainfall accumulation is moderate "
+            f"Recent rainfall accumulation "
+            f"is moderate "
             f"({recent_rainfall:.1f} mm)."
         )
 
@@ -241,7 +331,8 @@ def evaluate_risk(
         score += 1
 
         reasons.append(
-            f"High atmospheric humidity detected "
+            f"High atmospheric humidity "
+            f"detected "
             f"({humidity:.1f}%)."
         )
 
@@ -265,16 +356,21 @@ def evaluate_risk(
     if satellite_rain is not None:
 
         difference = abs(
-            satellite_rain - current_rainfall
+            satellite_rain -
+            current_rainfall
         )
 
-        if difference <= max(5, current_rainfall * 0.30):
+        if difference <= max(
+            5,
+            current_rainfall * 0.30
+        ):
 
             score += 1
 
             reasons.append(
-                "Satellite rainfall signal broadly "
-                "corroborates the location-based observation."
+                "Satellite rainfall signal "
+                "broadly corroborates the "
+                "location-based observation."
             )
 
     # --------------------------------------------------------
@@ -306,36 +402,91 @@ def evaluate_risk(
 
 
 # ============================================================
+# SEND SMS FUNCTION
+# ============================================================
+
+def send_sms(
+    phone_number,
+    message_body
+):
+
+    try:
+
+        account_sid = st.secrets[
+            "TWILIO_ACCOUNT_SID"
+        ]
+
+        auth_token = st.secrets[
+            "TWILIO_AUTH_TOKEN"
+        ]
+
+        from_number = st.secrets[
+            "TWILIO_FROM_NUMBER"
+        ]
+
+        client = Client(
+            account_sid,
+            auth_token
+        )
+
+        message = client.messages.create(
+            body=message_body,
+            from_=from_number,
+            to=phone_number
+        )
+
+        return (
+            True,
+            message.sid
+        )
+
+    except Exception as e:
+
+        return (
+            False,
+            str(e)
+        )
+
+
+# ============================================================
 # HEADER
 # ============================================================
 
 st.title("🌍 TerraSignal V2")
 
 st.caption(
-    "NASA Earth observations → anomaly detection → "
+    "NASA Earth observations → "
+    "anomaly detection → "
     "explainable environmental risk assessment"
 )
 
 st.info(
-    "Prototype only: risk thresholds and weights are experimental "
-    "and require historical validation before real-world warning use."
+    "Prototype only: risk thresholds and weights "
+    "are experimental and require historical "
+    "validation before real-world warning use."
 )
+
 
 # ============================================================
 # SIDEBAR
 # ============================================================
 
-st.sidebar.header("⚙️ TerraSignal Controls")
+st.sidebar.header(
+    "⚙️ TerraSignal Controls"
+)
 
 selected_location = st.sidebar.selectbox(
     "Location",
     list(LOCATIONS.keys())
 )
 
-lat, lon = LOCATIONS[selected_location]
+lat, lon = LOCATIONS[
+    selected_location
+]
 
 st.sidebar.write(
-    f"**Coordinates:** {lat:.4f}, {lon:.4f}"
+    f"**Coordinates:** "
+    f"{lat:.4f}, {lon:.4f}"
 )
 
 observation_date = st.sidebar.date_input(
@@ -355,26 +506,34 @@ enable_satellite = st.sidebar.checkbox(
     value=True
 )
 
+
 # ============================================================
 # DATE RANGE
 # ============================================================
 
 end_date = observation_date
 
-baseline_start = observation_date - timedelta(
-    days=analysis_days
+baseline_start = (
+    observation_date -
+    timedelta(days=analysis_days)
 )
 
-# We request the baseline period + observation day.
+start_str = (
+    baseline_start.strftime("%Y%m%d")
+)
 
-start_str = baseline_start.strftime("%Y%m%d")
-end_str = end_date.strftime("%Y%m%d")
+end_str = (
+    end_date.strftime("%Y%m%d")
+)
+
 
 # ============================================================
 # DATA FETCH
 # ============================================================
 
-with st.spinner("Fetching NASA POWER observations..."):
+with st.spinner(
+    "Fetching NASA POWER observations..."
+):
 
     df, error = get_nasa_power_data(
         lat,
@@ -383,35 +542,42 @@ with st.spinner("Fetching NASA POWER observations..."):
         end_str
     )
 
+
 # ============================================================
 # ERROR HANDLING
 # ============================================================
 
 if error:
 
-    st.error("Unable to retrieve NASA POWER data.")
+    st.error(
+        "Unable to retrieve NASA POWER data."
+    )
 
     st.code(error)
 
     st.warning(
-        "Try another observation date or check the network connection."
+        "Try another observation date "
+        "or check the network connection."
     )
 
     st.stop()
+
 
 # ============================================================
 # FIND OBSERVATION DAY
 # ============================================================
 
 target_row = df[
-    df["date"] == pd.to_datetime(observation_date)
+    df["date"] ==
+    pd.to_datetime(observation_date)
 ]
 
 if target_row.empty:
 
     st.warning(
-        "NASA POWER does not currently contain an observation "
-        "for the selected date."
+        "NASA POWER does not currently "
+        "contain an observation for the "
+        "selected date."
     )
 
     st.write(
@@ -427,34 +593,61 @@ if target_row.empty:
 
 current = target_row.iloc[0]
 
+
 # ============================================================
 # HISTORICAL BASELINE
 # ============================================================
 
-# Exclude today's observation when calculating the baseline.
-
 historical_df = df[
-    df["date"] < pd.to_datetime(observation_date)
+    df["date"] <
+    pd.to_datetime(observation_date)
 ]
 
-baseline = calculate_baseline(historical_df)
+baseline = calculate_baseline(
+    historical_df
+)
 
 recent_rainfall = calculate_recent_rainfall(
     historical_df,
-    days=min(3, len(historical_df))
+    days=min(
+        3,
+        len(historical_df)
+    )
 )
+
 
 # ============================================================
 # CURRENT DATA
 # ============================================================
 
-current_rainfall = float(current["rainfall"])
-current_temperature = float(current["temperature"])
-current_humidity = float(current["humidity"])
-current_wind = float(current["wind_speed"])
-current_wind_direction = float(current["wind_direction"])
-current_pressure = float(current["pressure"])
-current_solar = float(current["solar_radiation"])
+current_rainfall = float(
+    current["rainfall"]
+)
+
+current_temperature = float(
+    current["temperature"]
+)
+
+current_humidity = float(
+    current["humidity"]
+)
+
+current_wind = float(
+    current["wind_speed"]
+)
+
+current_wind_direction = float(
+    current["wind_direction"]
+)
+
+current_pressure = float(
+    current["pressure"]
+)
+
+current_solar = float(
+    current["solar_radiation"]
+)
+
 
 # ============================================================
 # SATELLITE SIGNAL
@@ -463,6 +656,7 @@ current_solar = float(current["solar_radiation"])
 satellite_rain = get_satellite_signal(
     enable_satellite
 )
+
 
 # ============================================================
 # RISK ENGINE
@@ -476,6 +670,7 @@ risk = evaluate_risk(
     wind_speed=current_wind,
     satellite_rain=satellite_rain
 )
+
 
 # ============================================================
 # TOP METRICS
@@ -505,41 +700,52 @@ col4.metric(
 
 st.divider()
 
+
 # ============================================================
 # RISK + WHY
 # ============================================================
 
-left, right = st.columns([1, 1])
+left, right = st.columns(
+    [1, 1]
+)
 
 with left:
 
-    st.subheader("🧠 Explainable Risk Engine")
+    st.subheader(
+        "🧠 Explainable Risk Engine"
+    )
 
     if risk["level"] == "VERY HIGH":
 
         st.error(
-            f"🚨 VERY HIGH RISK — Score {risk['score']}"
+            f"🚨 VERY HIGH RISK — "
+            f"Score {risk['score']}"
         )
 
     elif risk["level"] == "HIGH":
 
         st.error(
-            f"🔴 HIGH RISK — Score {risk['score']}"
+            f"🔴 HIGH RISK — "
+            f"Score {risk['score']}"
         )
 
     elif risk["level"] == "WATCH":
 
         st.warning(
-            f"🟠 WATCH — Score {risk['score']}"
+            f"🟠 WATCH — "
+            f"Score {risk['score']}"
         )
 
     else:
 
         st.success(
-            f"🟢 LOW RISK — Score {risk['score']}"
+            f"🟢 LOW RISK — "
+            f"Score {risk['score']}"
         )
 
-    st.subheader("❓ WHY?")
+    st.subheader(
+        "❓ WHY?"
+    )
 
     if risk["reasons"]:
 
@@ -552,14 +758,17 @@ with left:
     else:
 
         st.write(
-            "• No elevated indicators were detected "
-            "by the prototype rules."
+            "• No elevated indicators "
+            "were detected by the "
+            "prototype rules."
         )
 
     st.caption(
-        "Risk score is an experimental prototype metric, "
-        "not an official warning."
+        "Risk score is an experimental "
+        "prototype metric, not an "
+        "official warning."
     )
+
 
 # ============================================================
 # LOCAL WARNING
@@ -567,28 +776,38 @@ with left:
 
 with right:
 
-    st.subheader("🇱🇰 Local Warning")
+    st.subheader(
+        "🇱🇰 Local Warning"
+    )
 
     sinhala_message = (
-        f"{selected_location} ප්‍රදේශයේ පාරිසරික "
-        f"සංඥා පිළිබඳ අවධානය යොමු කරන්න. "
-        f"වර්ෂාපතනය ඓතිහාසික සාමාන්‍යයට "
-        f"{risk['anomaly_ratio']:.1f} ගුණයක් පමණ වේ."
+        f"{selected_location} ප්‍රදේශයේ "
+        f"පාරිසරික සංඥා පිළිබඳ අවධානය "
+        f"යොමු කරන්න. වර්ෂාපතනය "
+        f"ඓතිහාසික සාමාන්‍යයට "
+        f"{risk['anomaly_ratio']:.1f} "
+        f"ගුණයක් පමණ වේ."
     )
 
     english_message = (
-        f"Environmental conditions in {selected_location} "
-        f"should be monitored. Rainfall is approximately "
-        f"{risk['anomaly_ratio']:.1f}× the historical baseline."
+        f"Environmental conditions in "
+        f"{selected_location} should be "
+        f"monitored. Rainfall is "
+        f"approximately "
+        f"{risk['anomaly_ratio']:.1f}× "
+        f"the historical baseline."
     )
 
     st.info(
-        f"**Sinhala**\n\n{sinhala_message}"
+        f"**Sinhala**\n\n"
+        f"{sinhala_message}"
     )
 
     st.info(
-        f"**English**\n\n{english_message}"
+        f"**English**\n\n"
+        f"{english_message}"
     )
+
 
 # ============================================================
 # NASA EVIDENCE PANEL
@@ -596,35 +815,80 @@ with right:
 
 st.divider()
 
-st.subheader("🛰️ NASA Evidence Panel")
+st.subheader(
+    "🛰️ NASA Evidence Panel"
+)
 
-evidence_col1, evidence_col2 = st.columns(2)
+evidence_col1, evidence_col2 = st.columns(
+    2
+)
 
 with evidence_col1:
 
-    st.markdown("### NASA POWER Observation")
+    st.markdown(
+        "### NASA POWER Observation"
+    )
 
-    st.json({
-        "Observation Date": observation_date.strftime("%Y-%m-%d"),
-        "Latitude": lat,
-        "Longitude": lon,
-        "Rainfall (mm)": round(current_rainfall, 2),
-        "Maximum Temperature (°C)": round(current_temperature, 2),
-        "Relative Humidity (%)": round(current_humidity, 2),
-        "Wind Speed (m/s)": round(current_wind, 2),
-        "Wind Direction (°)": round(current_wind_direction, 2),
-        "Surface Pressure (kPa)": round(current_pressure, 2),
-        "Solar Radiation": round(current_solar, 2)
-    })
+    st.json(
+        {
+            "Observation Date":
+                observation_date.strftime(
+                    "%Y-%m-%d"
+                ),
+            "Latitude":
+                lat,
+            "Longitude":
+                lon,
+            "Rainfall (mm)":
+                round(
+                    current_rainfall,
+                    2
+                ),
+            "Maximum Temperature (°C)":
+                round(
+                    current_temperature,
+                    2
+                ),
+            "Relative Humidity (%)":
+                round(
+                    current_humidity,
+                    2
+                ),
+            "Wind Speed (m/s)":
+                round(
+                    current_wind,
+                    2
+                ),
+            "Wind Direction (°)":
+                round(
+                    current_wind_direction,
+                    2
+                ),
+            "Surface Pressure (kPa)":
+                round(
+                    current_pressure,
+                    2
+                ),
+            "Solar Radiation":
+                round(
+                    current_solar,
+                    2
+                )
+        }
+    )
+
 
 with evidence_col2:
 
-    st.markdown("### 🌧️ Satellite Layer")
+    st.markdown(
+        "### 🌧️ Satellite Layer"
+    )
 
     if satellite_rain is not None:
 
         st.success(
-            "Satellite rainfall demonstration signal available."
+            "Satellite rainfall "
+            "demonstration signal available."
         )
 
         st.metric(
@@ -633,16 +897,19 @@ with evidence_col2:
         )
 
         st.caption(
-            "⚠️ Current V2 demo uses a simulated satellite "
-            "signal. This is not live GPM/IMERG data."
+            "⚠️ Current V2 demo uses a "
+            "simulated satellite signal. "
+            "This is not live GPM/IMERG data."
         )
 
     else:
 
         st.warning(
             "Satellite layer unavailable. "
-            "NASA POWER continues as the primary data source."
+            "NASA POWER continues as the "
+            "primary data source."
         )
+
 
 # ============================================================
 # RAINFALL GRAPH
@@ -650,7 +917,9 @@ with evidence_col2:
 
 st.divider()
 
-st.subheader("📈 Rainfall vs Historical Baseline")
+st.subheader(
+    "📈 Rainfall vs Historical Baseline"
+)
 
 chart_df = df[
     ["date", "rainfall"]
@@ -667,15 +936,19 @@ st.line_chart(
 )
 
 st.caption(
-    "NASA POWER rainfall observations for the selected "
-    "historical analysis window."
+    "NASA POWER rainfall observations "
+    "for the selected historical "
+    "analysis window."
 )
+
 
 # ============================================================
 # BASELINE COMPARISON
 # ============================================================
 
-st.subheader("📊 Current Observation vs Baseline")
+st.subheader(
+    "📊 Current Observation vs Baseline"
+)
 
 comparison = pd.DataFrame(
     {
@@ -690,21 +963,29 @@ comparison = pd.DataFrame(
     ]
 )
 
-st.bar_chart(comparison)
+st.bar_chart(
+    comparison
+)
+
 
 # ============================================================
-# SMS DEMO
+# NOKIA / SMS DEMO
 # ============================================================
 
 st.divider()
 
-st.subheader("📱 Basic Phone / SMS Demo")
+st.subheader(
+    "📱 Nokia / Basic Phone Alert"
+)
 
 sms_message = (
     "TERRASIGNAL\n"
-    f"{risk['level']} - {selected_location}\n"
-    f"Rainfall: {current_rainfall:.1f} mm\n"
-    f"Baseline anomaly: {risk['anomaly_ratio']:.1f}x\n"
+    f"{risk['level']} - "
+    f"{selected_location}\n"
+    f"Rainfall: "
+    f"{current_rainfall:.1f} mm\n"
+    f"Baseline anomaly: "
+    f"{risk['anomaly_ratio']:.1f}x\n"
     "Monitor official safety instructions."
 )
 
@@ -714,15 +995,75 @@ st.code(
 )
 
 st.caption(
-    "Communication pathway demonstration only. "
-    "This prototype does not send real SMS messages."
+    "The message above is the alert that "
+    "will be sent to the basic phone."
 )
+
+phone_number = st.text_input(
+    "📞 Nokia phone number",
+    placeholder="+947XXXXXXXX"
+)
+
+send_button = st.button(
+    "📲 SEND SMS TO NOKIA",
+    type="primary"
+)
+
+if send_button:
+
+    if not phone_number:
+
+        st.warning(
+            "Please enter the Nokia phone "
+            "number first."
+        )
+
+    elif not phone_number.startswith("+"):
+
+        st.warning(
+            "Please enter the phone number "
+            "in international format, "
+            "for example +947XXXXXXXX."
+        )
+
+    else:
+
+        with st.spinner(
+            "Sending TerraSignal alert..."
+        ):
+
+            success, result = send_sms(
+                phone_number,
+                sms_message
+            )
+
+        if success:
+
+            st.success(
+                "✅ TerraSignal alert "
+                "sent successfully!"
+            )
+
+            st.caption(
+                f"Message ID: {result}"
+            )
+
+        else:
+
+            st.error(
+                "❌ SMS could not be sent."
+            )
+
+            st.code(result)
+
 
 # ============================================================
 # TECHNICAL TRANSPARENCY
 # ============================================================
 
-with st.expander("🔬 Technical Method"):
+with st.expander(
+    "🔬 Technical Method"
+):
 
     st.markdown(
         """
@@ -735,12 +1076,14 @@ with st.expander("🔬 Technical Method"):
         5. Multi-factor experimental risk scoring
         6. Explainable WHY output
         7. Sinhala + English warning generation
-        8. Basic-phone SMS payload demonstration
+        8. Basic-phone SMS alert pathway
 
-        **Important:** The risk weights and thresholds are experimental.
-        Historical validation is required before any operational use.
+        **Important:** The risk weights and thresholds
+        are experimental. Historical validation is
+        required before any operational use.
         """
     )
+
 
 # ============================================================
 # FOOTER
