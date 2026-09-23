@@ -277,7 +277,7 @@ def create_sinhala_message(
 
         return (
             "TerraSignal\n"
-            f"{location} ප්            "ප්‍රදේශයේ වැසි/ගංවතුර "
+            f"{location} ප්‍රදේශයේ වැසි/ගංවතුර "
             "අවදානමක් හඳුනාගෙන ඇත.\n"
             "කරුණාකර ආරක්ෂිත ස්ථානයක සිටින්න."
         )
